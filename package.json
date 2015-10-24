@@ -23,7 +23,9 @@
   "homepage": "https://github.com/ilkkao/object-store#readme",
   "devDependencies": {
     "chai": "^3.4.0",
-    "mocha": "^2.3.3",
-    "redis": "^2.2.5"
+    "mocha": "^2.3.3"
+  },
+  "dependencies": {
+    "ioredis": "^1.10.0"
   }
 }
