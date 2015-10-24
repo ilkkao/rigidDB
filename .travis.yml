@@ -11,12 +11,3 @@ cache:
 
 services:
   - redis-server
-
-before_install:
-  - "npm config set spin false"
-
-install:
-  - npm install
-
-script:
-  - npm test
