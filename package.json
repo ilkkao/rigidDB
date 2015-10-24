@@ -4,7 +4,7 @@
   "description": "Object store with an index",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "./node_modules/karma/bin/karma start karma.conf.js --single-run"
   },
   "repository": {
     "type": "git",
@@ -20,5 +20,13 @@
   "bugs": {
     "url": "https://github.com/ilkkao/object-store/issues"
   },
-  "homepage": "https://github.com/ilkkao/object-store#readme"
+  "homepage": "https://github.com/ilkkao/object-store#readme",
+  "devDependencies": {
+    "chai": "^3.4.0",
+    "karma": "^0.13.14",
+    "karma-chai": "^0.1.0",
+    "karma-chrome-launcher": "^0.2.1",
+    "karma-mocha": "^0.2.0",
+    "mocha": "^2.3.3"
+  }
 }
