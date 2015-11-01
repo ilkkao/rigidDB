@@ -1,10 +1,14 @@
-var expect = require('chai').expect;
-var store = require('../index');
+'use strict';
 
-describe('Basic tests', function() {
-    describe('Create', function() {
-        it("should create new object", function() {
+const expect = require('chai').expect,
+      store = require('../index'),
+      Redis = require('ioredis');
 
+let redisClient = new Redis();
+
+describe('Create', function() {
+    before(function(done) {
+        redisClient.flushall().then(function() {
             store.setSchema({
                 prefix: 'test',
                 schema: {
@@ -21,15 +25,86 @@ describe('Basic tests', function() {
             });
 
             store.start();
+            done();
+        });
+    });
 
-            store.create('car', {
-                color: 'blue',
-                mileage: 123,
+    it("create first object", function() {
+        return store.create('car', {
+            color: 'blue',
+            mileage: 12345,
+            inUse: true,
+            purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.equal(1);
+        });
+    });
+
+    it("create second object", function() {
+        return store.create('car', {
+            color: 'blue',
+            mileage: 42,
+            inUse: true,
+            purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.equal(2);
+        });
+    });
+
+    it("update second object", function() {
+        return store.update('car', 2, {
+            color: 'red'
+        }).then(function(result) {
+            expect(result).to.equal(1);
+        });
+    });
+
+    it("update non-existent object", function() {
+        return store.update('car', 42, {
+            color: 'red'
+        }).then(function(result) {
+            expect(result).to.equal(false);
+        });
+    });
+
+    it("get second object", function() {
+        return store.get('car', 2).then(function(result) {
+            expect(result).to.deep.equal({
+                color: 'red',
+                mileage: 42,
                 inUse: true,
-                purchased: Date.now()
+                purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
+        });
+    });
 
-            expect(1).to.equal(1);
+    it("remove second object", function() {
+        return store.delete('car', 2).then(function(result) {
+            expect(result).to.equal(1);
+        });
+    });
+
+    it("get non-existent second object", function() {
+        return store.get('car', 2).then(function(result) {
+            expect(result).to.equal(false);
+        });
+    });
+
+    it("empty multi", function() {
+        return store.multi(function() {}).then(function(result) {
+            expect(result).to.equal(false);
+        });
+    });
+
+    it("multi", function() {
+        return store.multi(function(tr) {
+            tr.create('car', { color: 'black' });
+            tr.update('car', 3, { color: 'white' });
+            tr.get('car', 3);
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                color: 'white'
+            });
         });
     });
 });
