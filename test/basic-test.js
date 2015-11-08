@@ -17,9 +17,15 @@ describe('Create', function() {
                             color: 'string',
                             mileage: 'int',
                             inUse: 'boolean',
-                            purchased: 'unixtime'
+                            purchased: 'date'
                         },
-                        index: []
+                        indices: [{
+                            uniq: true,
+                            fields: [ 'color', 'inUse' ]
+                        }, {
+                            uniq: true,
+                            fields: [ 'mileage', 'purchased' ]
+                        }]
                     }
                 }
             });
@@ -36,7 +42,9 @@ describe('Create', function() {
             inUse: true,
             purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
         }).then(function(result) {
-            expect(result).to.equal(1);
+            expect(result).to.deep.equal({
+                val: 1
+            });
         });
     });
 
@@ -47,15 +55,34 @@ describe('Create', function() {
             inUse: true,
             purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
         }).then(function(result) {
-            expect(result).to.equal(2);
+            expect(result).to.deep.equal({
+                err: 'E_INDEX',
+                val: false,
+                command: "CREATE"
+            });
+        });
+    });
+
+    it("create second object", function() {
+        return store.create('car', {
+            color: 'black',
+            mileage: 42,
+            inUse: true,
+            purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 3
+            });
         });
     });
 
     it("update second object", function() {
-        return store.update('car', 2, {
+        return store.update('car', 3, {
             color: 'red'
         }).then(function(result) {
-            expect(result).to.equal(1);
+            expect(result).to.deep.equal({
+                val: true
+            });
         });
     });
 
@@ -63,47 +90,96 @@ describe('Create', function() {
         return store.update('car', 42, {
             color: 'red'
         }).then(function(result) {
-            expect(result).to.equal(false);
+            expect(result).to.deep.equal({
+                err: 'E_MISSING',
+                val: false,
+                command: "UPDATE"
+            });
         });
     });
 
     it("get second object", function() {
-        return store.get('car', 2).then(function(result) {
+        return store.get('car', 3).then(function(result) {
             expect(result).to.deep.equal({
-                color: 'red',
-                mileage: 42,
-                inUse: true,
-                purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                val: {
+                    color: 'red',
+                    mileage: 42,
+                    inUse: true,
+                    purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                }
+            });
+        });
+    });
+
+    it("get all object ids", function() {
+        return store.getAllIds('car').then(function(result) {
+            expect(result).to.deep.equal({
+                val: [ 1, 3 ]
             });
         });
     });
 
     it("remove second object", function() {
-        return store.delete('car', 2).then(function(result) {
-            expect(result).to.equal(1);
+        return store.delete('car', 3).then(function(result) {
+            expect(result).to.deep.equal({
+                val: true
+            });
+        });
+    });
+
+    it("get all object ids", function() {
+        return store.getAllIds('car').then(function(result) {
+            expect(result).to.deep.equal({
+               val: [ 1 ]
+            });
         });
     });
 
     it("get non-existent second object", function() {
         return store.get('car', 2).then(function(result) {
-            expect(result).to.equal(false);
+            expect(result).to.deep.equal({
+                err: 'E_MISSING',
+                val: false,
+                command: "GET"
+            });
         });
     });
 
     it("empty multi", function() {
         return store.multi(function() {}).then(function(result) {
-            expect(result).to.equal(false);
+            expect(result).to.deep.equal({
+                val: true
+            });
+        });
+    });
+
+    it("multi containing invalid create", function(done) {
+        store.multi(function(tr) {
+            tr.create('car', { color: 'black' });
+        }).then(null, function(reason) {
+            expect(reason).to.equal('Create() must set all attributes');
+            done();
         });
     });
 
     it("multi", function() {
         return store.multi(function(tr) {
-            tr.create('car', { color: 'black' });
-            tr.update('car', 3, { color: 'white' });
-            tr.get('car', 3);
+            tr.create('car', {
+                color: 'red',
+                mileage: 42,
+                inUse: true,
+                purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
+            tr.update('car', 4, { color: 'white' });
+            tr.get('car', 4);
         }).then(function(result) {
             expect(result).to.deep.equal({
-                color: 'white'
+                val: {
+                    color: 'white',
+                    mileage: 42,
+                    inUse: true,
+                    purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                }
             });
         });
     });

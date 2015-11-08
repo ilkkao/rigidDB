@@ -1,6 +1,7 @@
 'use strict';
 
-const Redis = require('ioredis'),
+const debug = require('debug')('code'),
+      Redis = require('ioredis'),
       crypto = require('crypto');
 
 let client = null;
@@ -38,6 +39,14 @@ exports.exists = function(type, id) {
     return execSingle(exists, type, id);
 };
 
+exports.getAllIds = function(type) {
+    return execSingle(getAllIds, type);
+};
+
+exports.size = function(type) {
+    return execSingle(size, type);
+};
+
 exports.multi = function(cb) {
     let ctx = newContext();
 
@@ -72,84 +81,130 @@ function execSingle() {
 }
 
 function create(ctx, type, attrs) {
-    let ret = normalizeFields(type, attrs)
-    let redisProps = ret.fields;
-    let redisVals = ret.values;
-    let lua = '';
+    let redisAttrs = normalizeAttrs(type, attrs)
 
-    genCode(ctx, `local p1 = redis.call('INCR', '${prefix}:${type}:nextid')`);
-
-    for (let prop of redisProps) {
-        lua += `, '${prop}', ARGV[${ctx.paramCounter++}]`;
+    if (Object.keys(schema[type].definition).length !== Object.keys(redisAttrs).length) {
+        ctx.error = 'Create() must set all attributes';
+        return;
     }
 
-    genCode(ctx, `redis.call('HMSET', '${prefix}:${type}:' .. p1${lua})`);
-    genCode(ctx, `ret = { 'create', p1 }`);
+    genCode(ctx, `local id = redis.call('INCR', '${prefix}:${type}:nextid')`);
+    genCode(ctx, `local key = '${prefix}:${type}:' .. id`);
+    genCode(ctx, `local values = {`);
 
-    pushParams(ctx, redisVals);
+    for (let prop in redisAttrs) {
+        genCode(ctx, `['${prop}'] = ARGV[${ctx.paramCounter++}],`);
+        pushParams(ctx, redisAttrs[prop]);
+    }
+
+    genCode(ctx, `}`);
+
+    addIndices(ctx, type, 'CREATE');
+
+    genCode(ctx, `hmset(key, values)`);
+    genCode(ctx, `redis.call('SADD', '${prefix}:${type}:ids', id)`);
+
+    genCode(ctx, `ret = { 'CREATE', 'E_NONE', id }`);
 }
 
 function update(ctx, type, id, attrs) {
-    let ret = normalizeFields(type, attrs)
-    let redisProps = ret.fields;
-    let redisVals = ret.values;
-    let lua = '';
+    let redisAttrs = normalizeAttrs(type, attrs)
 
-    genCode(ctx, `local p1 = '${prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", p1) == 0 then return { 'update', 0 } end`);
+    genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
+    pushParams(ctx, id);
 
-    for (let prop of redisProps) {
-        lua += `, '${prop}', ARGV[${ctx.paramCounter++}]`;
+    genCode(ctx, `local key = '${prefix}:${type}:' .. id`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'UPDATE', 'E_MISSING' } end`);
+    genCode(ctx, `local values = hgetall(key)`);
+
+    for (let prop in redisAttrs) {
+        genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
+        pushParams(ctx, redisAttrs[prop]);
     }
 
-    genCode(ctx, `redis.call('HMSET', p1${lua})`);
-    genCode(ctx, `ret = { 'update', 1 }`);
+    assertIndicesSlotsFree(ctx, type, 'UPDATE');
 
-    redisVals.unshift(id);
-    pushParams(ctx, redisVals);
+    genCode(ctx, `values = hgetall(key)`);
+    removeIndices(ctx, type, 'UPDATE')
+
+    for (let prop in redisAttrs) {
+        genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
+        pushParams(ctx, redisAttrs[prop]);
+    }
+
+    addIndices(ctx, type, 'UPDATE');
+
+    genCode(ctx, `hmset(key, values)`);
+    genCode(ctx, `ret = { 'UPDATE', 'E_NONE', true }`);
 }
 
 function remove(ctx, type, id) {
-    genCode(ctx, `local p1 = '${prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", p1) == 0 then return { 'remove', 0 } end`);
-    genCode(ctx, `ret = { 'remove', redis.call('DEL', p1) }`);
+    genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
+    genCode(ctx, `local key = '${prefix}:${type}:' .. id`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'REMOVE', 0 } end`);
+    genCode(ctx, `local values = hgetall(key)`);
+
+    removeIndices(ctx, type, 'REMOVE');
+
+    genCode(ctx, `redis.call('SREM', '${prefix}:${type}:ids', id)`);
+    genCode(ctx, `redis.call('DEL', key)`);
+    genCode(ctx, `ret = { 'REMOVE', 'E_NONE' }`);
 
     pushParams(ctx, id);
 }
 
 function get(ctx, type, id) {
-    genCode(ctx, `local p1 = '${prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", p1) == 0 then return { 'get', 0 } end`);
-    genCode(ctx, `ret = { 'get', redis.call('HGETALL', p1), '${type}' }`);
+    genCode(ctx, `local key = '${prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'GET', 'E_MISSING' } end`);
+    genCode(ctx, `ret = { 'GET', 'E_NONE', redis.call('HGETALL', key), '${type}' }`);
 
     pushParams(ctx, id);
 }
 
 function exists(ctx, type, id) {
-    genCode(ctx, `local p1 = '${prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", p1) == 0 then return { 'exists', 0 } end`);
-    genCode(ctx, `ret = { 'exists', 1 }`);
+    genCode(ctx, `local key = '${prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'E_MISSING' } end`);
+    genCode(ctx, `ret = { 'EXISTS', 'E_NONE' }`);
 
     pushParams(ctx, id);
 }
 
+function getAllIds(ctx, type) {
+    genCode(ctx, `local key = '${prefix}:${type}:ids'`);
+    genCode(ctx, `ret = { 'GETALLIDS', 'E_NONE', redis.call("SMEMBERS", key) }`);
+}
+
 function exec(ctx) {
-    let code = `local ret = { 'none', 0 }\n ${ctx.script}\n return ret`;
+    if (ctx.error) {
+        return Promise.reject(ctx.error);
+    }
+
+    let code = `${utilityFuncs()}\n local ret = { 'none', 'E_NONE' }\n ${ctx.script}\n return ret`;
+
     let sha1 = crypto.createHash('sha1').update(code).digest('hex');
     let evalParams = [ sha1, 0 ].concat(ctx.params);
 
+    debug(`PARAMETERS : ${ctx.params}`);
+    debug(code);
+
     function decodeResult(ret) {
         let command = ret[0];
-        let redisRetVal = ret[1];
-        let retVal;
+        let err = ret[1];
+        let val = ret[2];
 
-        if (command === 'get') {
-            retVal = redisRetVal ? denormalizeFields(ret[2], redisRetVal) : false;
-        } else {
-            retVal = redisRetVal || false;
+        if (err != 'E_NONE') {
+            return { val: false, err: err, command: command };
         }
 
-        return retVal;
+        if (command === 'GET') {
+            val = denormalizeAttrs(ret[3], val);
+        } else if (command === 'GETALLIDS') {
+            val = val.map(item => parseInt(item));
+        } else if (command === 'UPDATE' || command === 'REMOVE' || command === 'none') {
+            val = true;
+        }
+
+        return { val: val };
     }
 
     if (cachedScripts[sha1]) {
@@ -162,13 +217,67 @@ function exec(ctx) {
     }
 }
 
-function normalizeFields(type, obj) {
-    let redisProps = [];
-    let redisVals = [];
+function calcIndexParams(ctx, type) {
+    let indices = schema[type].indices;
+    let redisIndices = [];
 
-    for (let prop in obj) {
+    // { name: "color:mileage", value: 'red:423423' }
+
+    if (indices && indices.length > 0) {
+        for (let index of indices) {
+            let sortedFields = index.fields.sort();
+
+            if (index.uniq) {
+                let values = sortedFields.map(field => {
+                    return `values['${field}']`;
+                });
+
+                redisIndices.push({
+                    name: `${prefix}:${type}:index:${sortedFields.join(':')}`,
+                    value: values.join(`..':'..`)
+                });
+            }
+        }
+    }
+
+    return redisIndices;
+}
+
+function assertIndicesSlotsFree(ctx, type, command) {
+    let redisIndices = calcIndexParams(ctx, type);
+
+    for (let index of redisIndices) {
+        genCode(ctx, `local currentIndex = redis.call('HGET', '${index.name}', ${index.value})`);
+        genCode(ctx, `if currentIndex and currentIndex ~= id then`);
+        genCode(ctx, `return { '${command}', 'E_INDEX' }`)
+        genCode(ctx, `end`);
+    }
+
+    return redisIndices;
+}
+
+function addIndices(ctx, type, command) {
+    let redisIndices = assertIndicesSlotsFree(ctx, type, command);
+
+    for (let redisIndex of redisIndices) {
+        genCode(ctx, `redis.call('HSET', '${redisIndex.name}', ${redisIndex.value}, id)`);
+    }
+}
+
+function removeIndices(ctx, type) {
+    let redisIndices = calcIndexParams(ctx, type);
+
+    for (let redisIndex of redisIndices) {
+        genCode(ctx, `redis.call('HDEL', '${redisIndex.name}', ${redisIndex.value})`);
+    }
+}
+
+function normalizeAttrs(type, attrs) {
+    let redisAttrs = {};
+
+    for (let prop in attrs) {
         let propType = schema[type].definition[prop];
-        let propVal = obj[prop];
+        let propVal = attrs[prop];
         let redisVal;
 
         switch (propType) {
@@ -181,21 +290,20 @@ function normalizeFields(type, obj) {
             case 'string':
                 redisVal = String(propVal);
                 break;
-            case 'unixtime':
+            case 'date':
                 redisVal = propVal.toString();
                 break;
         }
 
         if (typeof(redisVal) !== 'undefined') {
-            redisProps.push(prop);
-            redisVals.push(redisVal);
+            redisAttrs[prop] = redisVal;
         }
     }
 
-    return { fields: redisProps, values: redisVals };
+    return redisAttrs;
 }
 
-function denormalizeFields(type, redisRetVal) {
+function denormalizeAttrs(type, redisRetVal) {
     let ret = {};
 
     while (redisRetVal.length > 0) {
@@ -210,7 +318,7 @@ function denormalizeFields(type, redisRetVal) {
             case 'int':
                 val = parseInt(val);
                 break;
-            case 'unixtime':
+            case 'date':
                 val = new Date(val);
                 break;
         }
@@ -225,7 +333,8 @@ function newContext() {
     return {
         paramCounter: 1,
         params: [],
-        script: ''
+        script: '',
+        error: false
     }
 }
 
@@ -239,4 +348,40 @@ function pushParams(ctx, params) {
     } else {
         ctx.params.push(params);
     }
+}
+
+function utilityFuncs() {
+    return `
+        local hgetall = function (key)
+            local bulk = redis.call('HGETALL', key)
+            local result = {}
+            local nextkey
+            for i, v in ipairs(bulk) do
+                if i % 2 == 1 then
+                    nextkey = v
+                else
+                    result[nextkey] = v
+                end
+            end
+            return result
+        end
+
+        local hmget = function (key, ...)
+            if next(arg) == nil then return {} end
+            local bulk = redis.call('HMGET', key, unpack(arg))
+            local result = {}
+            for i, v in ipairs(bulk) do result[ arg[i] ] = v end
+            return result
+        end
+
+        local hmset = function (key, dict)
+            if next(dict) == nil then return nil end
+            local bulk = {}
+            for k, v in pairs(dict) do
+                table.insert(bulk, k)
+                table.insert(bulk, v)
+            end
+            return redis.call('HMSET', key, unpack(bulk))
+        end
+    `;
 }
