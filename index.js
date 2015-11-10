@@ -11,7 +11,17 @@ function ObjectStore(prefix, schema) {
         throw('Invalid prefix.');
     }
 
-    for (let collectionName of Object.keys(schema)) {
+    if (typeof(schema) !== 'object') {
+        throw('Invalid schema.');
+    }
+
+    let collections = Object.keys(schema);
+
+    if (collections.length === 0) {
+        throw('At least one collection must be defined.');
+    }
+
+    for (let collectionName of collections) {
         let collection = schema[collectionName];
 
         if (!collection.definition) {
@@ -22,7 +32,7 @@ function ObjectStore(prefix, schema) {
 
         for (let fieldName of fieldNames) {
             if (!onlyLetters(fieldName)) {
-                return false;
+                throw(`Invalid field name: '${fieldName}'`);
             }
 
             let type = collection.definition[fieldName];
@@ -34,12 +44,12 @@ function ObjectStore(prefix, schema) {
 
         for (let index of collection.indices) {
             if (!(index.uniq === true || index.uniq === false)) {
-                thow('Invalid index unique definition');
+                throw('Invalid or missing index unique definition');
             }
 
             for (let field of index.fields) {
                 if (fieldNames.indexOf(field) === -1) {
-                    throw(`Invalid index field: '${fields}'`);
+                    throw(`Invalid index field: '${field}'`);
                 }
             }
         }
