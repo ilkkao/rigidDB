@@ -25,6 +25,9 @@ describe('Create', function() {
                         }, {
                             uniq: true,
                             fields: [ 'mileage', 'purchased' ]
+                        }, {
+                            uniq: false,
+                            fields: [ 'color' ]
                         }]
                     }
                 }
@@ -180,6 +183,23 @@ describe('Create', function() {
                     inUse: true,
                     purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
                 }
+            });
+        });
+    });
+
+    it("find black objects", function() {
+        return store.findAll('car', { color: 'white' }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: [ 4 ]
+            });
+        });
+    });
+
+
+    it("find gold objects", function() {
+        return store.findAll('car', { color: 'gold' }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: []
             });
         });
     });

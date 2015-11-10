@@ -13,6 +13,8 @@ let cachedScripts = {};
 exports.setSchema = function(definition) {
     prefix = definition.prefix || '';
     schema = definition.schema;
+
+    // TODO: Check that field names and prefix doesn't contain character :
 }
 
 exports.start = function(params) {
@@ -64,10 +66,33 @@ exports.multi = function(cb) {
 };
 
 exports.find = function(type, searchParams) {
-    // redisobj.find('window', {
-    //     email: 'foo@bar.fi'
-    // })
+    if (findIndex(type, searchParams) !== 'uniq') {
+        return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
+    }
+
+    return execSingle(find, type, searchParams);
 };
+
+exports.findAll = function(type, searchParams) {
+    if (findIndex(type, searchParams) !== 'nonUniq') {
+        return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
+    }
+
+    return execSingle(findAll, type, searchParams);
+};
+
+function findIndex(type, searchParams) {
+    let indices = schema[type].indices || [];
+    let searchFields = Object.keys(searchParams).sort().join();
+
+    for (let index of indices) {
+        if (index.fields.sort().join() === searchFields) {
+            return index.uniq ? 'uniq' : 'nonUniq';
+        }
+    }
+
+    return false;
+}
 
 function execSingle() {
     let args = Array.prototype.slice.call(arguments);
@@ -90,14 +115,7 @@ function create(ctx, type, attrs) {
 
     genCode(ctx, `local id = redis.call('INCR', '${prefix}:${type}:nextid')`);
     genCode(ctx, `local key = '${prefix}:${type}:' .. id`);
-    genCode(ctx, `local values = {`);
-
-    for (let prop in redisAttrs) {
-        genCode(ctx, `['${prop}'] = ARGV[${ctx.paramCounter++}],`);
-        pushParams(ctx, redisAttrs[prop]);
-    }
-
-    genCode(ctx, `}`);
+    addValuesVar(ctx, redisAttrs);
 
     addIndices(ctx, type, 'CREATE');
 
@@ -122,7 +140,7 @@ function update(ctx, type, id, attrs) {
         pushParams(ctx, redisAttrs[prop]);
     }
 
-    assertIndicesSlotsFree(ctx, type, 'UPDATE');
+    assertUniqIndicesFree(ctx, type, 'UPDATE');
 
     genCode(ctx, `values = hgetall(key)`);
     removeIndices(ctx, type, 'UPDATE')
@@ -174,6 +192,31 @@ function getAllIds(ctx, type) {
     genCode(ctx, `ret = { 'GETALLIDS', 'E_NONE', redis.call("SMEMBERS", key) }`);
 }
 
+function find(ctx, type, attrs) {
+    let ret = genIndex(ctx, type, attrs);
+
+    genCode(ctx, `ret = { 'FIND', 'E_NONE', redis.call('HGET', ${ret.name}, ${ret.prop}) }`);
+}
+
+function findAll(ctx, type, attrs) {
+    let ret = genIndex(ctx, type, attrs);
+
+    genCode(ctx, `ret = { 'FINDALL', 'E_NONE', redis.call('SMEMBERS', '${ret.name}:' .. ${ret.prop}) }`);
+}
+
+function genIndex(ctx, type, attrs) {
+    let redisAttrs = normalizeAttrs(type, attrs)
+
+    addValuesVar(ctx, redisAttrs);
+
+    let fields = Object.keys(redisAttrs);
+
+    return {
+        name: indexName(type, fields),
+        prop: indexValues(type, fields)
+    }
+}
+
 function exec(ctx) {
     if (ctx.error) {
         return Promise.reject(ctx.error);
@@ -198,7 +241,7 @@ function exec(ctx) {
 
         if (command === 'GET') {
             val = denormalizeAttrs(ret[3], val);
-        } else if (command === 'GETALLIDS') {
+        } else if (command === 'GETALLIDS' || command === 'FINDALL') {
             val = val.map(item => parseInt(item));
         } else if (command === 'UPDATE' || command === 'REMOVE' || command === 'none') {
             val = true;
@@ -217,59 +260,79 @@ function exec(ctx) {
     }
 }
 
-function calcIndexParams(ctx, type) {
-    let indices = schema[type].indices;
+function genAllIndices(ctx, type) {
+    let indices = schema[type].indices || [];
     let redisIndices = [];
 
     // { name: "color:mileage", value: 'red:423423' }
 
-    if (indices && indices.length > 0) {
-        for (let index of indices) {
-            let sortedFields = index.fields.sort();
+    for (let index of indices) {
+        redisIndices.push({
+            name: indexName(type, index.fields),
+            value: indexValues(type, index.fields),
+            uniq: index.uniq
+        });
+    }
 
-            if (index.uniq) {
-                let values = sortedFields.map(field => {
-                    return `values['${field}']`;
-                });
+    return redisIndices;
+}
 
-                redisIndices.push({
-                    name: `${prefix}:${type}:index:${sortedFields.join(':')}`,
-                    value: values.join(`..':'..`)
-                });
-            }
+function indexName(type, fields) {
+    return `${prefix}:${type}:index:${fields.sort().join(':')}`;
+}
+
+function indexValues(type, fields) {
+    return fields.sort().map(field => `string.gsub(values["${field}"], ':', '::')`).join(`..':'..`);
+}
+
+function assertUniqIndicesFree(ctx, type, command) {
+    let redisIndices = genAllIndices(ctx, type);
+
+    for (let index of redisIndices) {
+        if (index.uniq) {
+            genCode(ctx, `local currentIndex = redis.call('HGET', '${index.name}', ${index.value})`);
+            genCode(ctx, `if currentIndex and currentIndex ~= id then`);
+            genCode(ctx, `return { '${command}', 'E_INDEX' }`)
+            genCode(ctx, `end`);
         }
     }
 
     return redisIndices;
 }
 
-function assertIndicesSlotsFree(ctx, type, command) {
-    let redisIndices = calcIndexParams(ctx, type);
-
-    for (let index of redisIndices) {
-        genCode(ctx, `local currentIndex = redis.call('HGET', '${index.name}', ${index.value})`);
-        genCode(ctx, `if currentIndex and currentIndex ~= id then`);
-        genCode(ctx, `return { '${command}', 'E_INDEX' }`)
-        genCode(ctx, `end`);
-    }
-
-    return redisIndices;
-}
-
 function addIndices(ctx, type, command) {
-    let redisIndices = assertIndicesSlotsFree(ctx, type, command);
+    let redisIndices = assertUniqIndicesFree(ctx, type, command);
 
     for (let redisIndex of redisIndices) {
-        genCode(ctx, `redis.call('HSET', '${redisIndex.name}', ${redisIndex.value}, id)`);
+        if (redisIndex.uniq) {
+            genCode(ctx, `redis.call('HSET', '${redisIndex.name}', ${redisIndex.value}, id)`);
+        } else {
+            genCode(ctx, `redis.call('SADD', '${redisIndex.name}:' .. ${redisIndex.value}, id)`);
+        }
     }
 }
 
 function removeIndices(ctx, type) {
-    let redisIndices = calcIndexParams(ctx, type);
+    let redisIndices = genAllIndices(ctx, type);
 
     for (let redisIndex of redisIndices) {
-        genCode(ctx, `redis.call('HDEL', '${redisIndex.name}', ${redisIndex.value})`);
+        if (redisIndex.uniq) {
+            genCode(ctx, `redis.call('HDEL', '${redisIndex.name}', ${redisIndex.value})`);
+        } else {
+            genCode(ctx, `redis.call('SREM', '${redisIndex.name}:' .. ${redisIndex.value}, id)`);
+        }
     }
+}
+
+function addValuesVar(ctx, attrs) {
+    genCode(ctx, `local values = {`);
+
+    for (let prop in attrs) {
+        genCode(ctx, `['${prop}'] = ARGV[${ctx.paramCounter++}],`);
+        pushParams(ctx, attrs[prop]);
+    }
+
+    genCode(ctx, `}`);
 }
 
 function normalizeAttrs(type, attrs) {
@@ -348,6 +411,10 @@ function pushParams(ctx, params) {
     } else {
         ctx.params.push(params);
     }
+}
+
+function escape(str) {
+    return str.replace(/:/g, '::');
 }
 
 function utilityFuncs() {
