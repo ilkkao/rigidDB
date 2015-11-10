@@ -72,4 +72,26 @@ describe('Constructor', function() {
             });
         }).to.throw('Invalid index field: \'mileage\'');
     });
+
+    it("Valid parameters don't throw", function() {
+        expect(function() {
+            new ObjectStore('foo', {
+                cars: {
+                    definition: {
+                        color: 'string',
+                        year: 'int',
+                        convertible: 'boolean',
+                        purchaseDate: 'date'
+                    },
+                    indices: [{
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    }, {
+                        uniq: false,
+                        fields: [ 'color', 'year', 'convertible' ]
+                    }]
+                }
+            });
+        }).not.to.throw();
+    });
 });
