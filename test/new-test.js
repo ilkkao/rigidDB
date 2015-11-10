@@ -3,7 +3,7 @@
 const expect = require('chai').expect,
       ObjectStore = require('../index');
 
-describe('Create', function() {
+describe('Constructor', function() {
     it("Missing prefix parameter throws", function() {
         expect(function() {
             new ObjectStore();

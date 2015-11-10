@@ -7,7 +7,7 @@ const expect = require('chai').expect,
 let redisClient = new Redis();
 let store;
 
-describe('Create', function() {
+describe('Legacy', function() {
     before(function(done) {
         redisClient.flushall().then(function() {
             store = new ObjectStore('test', {
