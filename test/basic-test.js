@@ -1,39 +1,36 @@
 'use strict';
 
 const expect = require('chai').expect,
-      store = require('../index'),
+      ObjectStore = require('../index'),
       Redis = require('ioredis');
 
 let redisClient = new Redis();
+let store;
 
 describe('Create', function() {
     before(function(done) {
         redisClient.flushall().then(function() {
-            store.setSchema({
-                prefix: 'test',
-                schema: {
-                    car: {
-                        definition: {
-                            color: 'string',
-                            mileage: 'int',
-                            inUse: 'boolean',
-                            purchased: 'date'
-                        },
-                        indices: [{
-                            uniq: true,
-                            fields: [ 'color', 'inUse' ]
-                        }, {
-                            uniq: true,
-                            fields: [ 'mileage', 'purchased' ]
-                        }, {
-                            uniq: false,
-                            fields: [ 'color' ]
-                        }]
-                    }
+            store = new ObjectStore('test', {
+                car: {
+                    definition: {
+                        color: 'string',
+                        mileage: 'int',
+                        inUse: 'boolean',
+                        purchased: 'date'
+                    },
+                    indices: [{
+                        uniq: true,
+                        fields: [ 'color', 'inUse' ]
+                    }, {
+                        uniq: true,
+                        fields: [ 'mileage', 'purchased' ]
+                    }, {
+                        uniq: false,
+                        fields: [ 'color' ]
+                    }]
                 }
             });
 
-            store.start();
             done();
         });
     });
