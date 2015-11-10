@@ -153,12 +153,15 @@ describe('Legacy', function() {
         });
     });
 
-    it("multi containing invalid create", function(done) {
-        store.multi(function(tr) {
+    it("multi containing invalid create", function() {
+        return store.multi(function(tr) {
             tr.create('car', { color: 'black' });
-        }).then(null, function(reason) {
-            expect(reason).to.equal('Create() must set all attributes');
-            done();
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                err: 'E_PARAMS',
+                val: false,
+                command: "CREATE"
+            });
         });
     });
 

@@ -91,12 +91,18 @@ ObjectStore.prototype.size = function(type) {
 ObjectStore.prototype.multi = function(cb) {
     let ctx = newContext();
 
+    const execute = function(op, args) {
+        if (!ctx.error) {
+            this[op].apply(this, [ ctx ].concat(args));
+        }
+    }.bind(this);
+
     let api = {
-        create: (type, attrs) => this._create(ctx, type, attrs),
-        update: (type, id, attrs) => this._update(ctx, type, id, attrs),
-        delete: (type, id) => this._delete(ctx, type, id),
-        get: (type, id) => this._get(ctx, type, id),
-        exists: (type, id) => this._exists(ctx, type, id)
+        create: (type, attrs) => execute('_create', [ type, attrs ]),
+        update: (type, id, attrs) => execute('_update', [ type, id, attrs ]),
+        delete: (type, id) => execute('_delete', [ type, id ]),
+        get: (type, id) => execute('_get', [ type, id ]),
+        exists: (type, id) => execute('_exists', [ type, id ])
     };
 
     cb(api);
@@ -133,7 +139,7 @@ ObjectStore.prototype._execSingle = function() {
 
 ObjectStore.prototype._exec = function(ctx) {
     if (ctx.error) {
-        return Promise.reject(ctx.error);
+        return Promise.resolve({ val: false, err: ctx.error.err, command: ctx.error.command });
     }
 
     let code = `${utilityFuncs()}\n local ret = { 'none', 'E_NONE' }\n ${ctx.script}\n return ret`;
@@ -192,7 +198,7 @@ ObjectStore.prototype._create = function(ctx, type, attrs) {
     let redisAttrs = this._normalizeAttrs(type, attrs)
 
     if (Object.keys(this.schema[type].definition).length !== Object.keys(redisAttrs).length) {
-        ctx.error = 'Create() must set all attributes';
+        ctx.error = { command: 'CREATE', err: 'E_PARAMS' };
         return;
     }
 
