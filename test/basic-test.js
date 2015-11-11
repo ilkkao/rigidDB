@@ -53,34 +53,19 @@ describe('Legacy', function() {
 
     it("create second object", function() {
         return store.create('car', {
-            color: 'blue',
-            mileage: 42,
-            inUse: true,
-            purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                err: 'E_INDEX',
-                val: false,
-                command: "CREATE"
-            });
-        });
-    });
-
-    it("create second object", function() {
-        return store.create('car', {
             color: 'black',
             mileage: 42,
             inUse: true,
             purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 3
+                val: 2
             });
         });
     });
 
     it("update second object", function() {
-        return store.update('car', 3, {
+        return store.update('car', 2, {
             color: 'red'
         }).then(function(result) {
             expect(result).to.deep.equal({
@@ -89,20 +74,8 @@ describe('Legacy', function() {
         });
     });
 
-    it("update non-existent object", function() {
-        return store.update('car', 42, {
-            color: 'red'
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                err: 'E_MISSING',
-                val: false,
-                command: "UPDATE"
-            });
-        });
-    });
-
     it("get second object", function() {
-        return store.get('car', 3).then(function(result) {
+        return store.get('car', 2).then(function(result) {
             expect(result).to.deep.equal({
                 val: {
                     color: 'red',
@@ -117,13 +90,13 @@ describe('Legacy', function() {
     it("get all object ids", function() {
         return store.getAllIds('car').then(function(result) {
             expect(result).to.deep.equal({
-                val: [ 1, 3 ]
+                val: [ 1, 2 ]
             });
         });
     });
 
     it("remove second object", function() {
-        return store.delete('car', 3).then(function(result) {
+        return store.delete('car', 2).then(function(result) {
             expect(result).to.deep.equal({
                 val: true
             });
@@ -176,8 +149,8 @@ describe('Legacy', function() {
                 inUse: true,
                 purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
-            tr.update('car', 4, { color: 'white' });
-            tr.get('car', 4);
+            tr.update('car', 3, { color: 'white' });
+            tr.get('car', 3);
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: {
@@ -193,7 +166,7 @@ describe('Legacy', function() {
     it("find black objects", function() {
         return store.findAll('car', { color: 'white' }).then(function(result) {
             expect(result).to.deep.equal({
-                val: [ 4 ]
+                val: [ 3 ]
             });
         });
     });
