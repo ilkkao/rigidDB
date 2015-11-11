@@ -11,7 +11,7 @@ let redisClient = new Redis({
 let store;
 
 describe('Create', function() {
-    before(function() {
+    beforeEach(function() {
         return redisClient.flushdb().then(function() {
             store = new ObjectStore('foo', {
                 car: {
@@ -44,6 +44,32 @@ describe('Create', function() {
             expect(result).to.deep.equal({
                 command: 'CREATE',
                 err: 'E_PARAMS',
+                val: false
+            });
+        });
+    });
+
+    it('Fails if unique index would not be unique', function() {
+        return store.create('car', {
+            color: 'blue',
+            mileage: 12345,
+            convertible: true,
+            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 1
+            });
+
+            return store.create('car', {
+                color: 'blue',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'CREATE',
+                err: 'E_INDEX',
                 val: false
             });
         });
