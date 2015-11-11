@@ -336,7 +336,8 @@ ObjectStore.prototype._indexName = function(type, fields) {
 }
 
 ObjectStore.prototype._indexValues = function(type, fields) {
-    return fields.sort().map(field => `string.gsub(values["${field}"], ':', '::')`).join(`..':'..`);
+    // Lua gsub returns two values. Extra parenthesis are used to discard the second value.
+    return fields.sort().map(field => `(string.gsub(values["${field}"], ':', '::'))`).join(`..':'..`);
 }
 
 ObjectStore.prototype._assertUniqIndicesFree = function(ctx, type, command) {
