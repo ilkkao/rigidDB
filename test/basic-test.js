@@ -8,8 +8,8 @@ let redisClient = new Redis();
 let store;
 
 describe('Legacy', function() {
-    before(function(done) {
-        redisClient.flushall().then(function() {
+    before(function() {
+        return redisClient.flushall().then(function() {
             store = new ObjectStore('test', {
                 car: {
                     definition: {
@@ -30,8 +30,6 @@ describe('Legacy', function() {
                     }]
                 }
             });
-
-            done();
         });
     });
 
