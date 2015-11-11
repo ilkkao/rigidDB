@@ -4,7 +4,10 @@ const expect = require('chai').expect,
       ObjectStore = require('../index'),
       Redis = require('ioredis');
 
-let redisClient = new Redis();
+let redisClient = new Redis({
+    db: 15
+});
+
 let store;
 
 describe('Legacy', function() {
@@ -29,6 +32,8 @@ describe('Legacy', function() {
                         fields: [ 'color' ]
                     }]
                 }
+            }, {
+                db: 15
             });
         });
     });
