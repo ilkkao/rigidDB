@@ -37,7 +37,7 @@ function ObjectStore(prefix, schema) {
 
             let type = collection.definition[fieldName];
 
-            if (!/^(string|int|boolean|date)$/.test(type)) {
+            if (!/^(string|int|boolean|date|timestamp)$/.test(type)) {
                 throw(`Invalid type: '${type}'`);
             }
         }
@@ -402,6 +402,9 @@ ObjectStore.prototype._normalizeAttrs = function(type, attrs) {
             case 'date':
                 redisVal = propVal.toString();
                 break;
+            case 'timestamp':
+                redisVal = propVal.getTime().toString();
+                break;
         }
 
         if (typeof(redisVal) !== 'undefined') {
@@ -429,6 +432,9 @@ ObjectStore.prototype._denormalizeAttrs = function(type, redisRetVal) {
                 break;
             case 'date':
                 val = new Date(val);
+                break;
+            case 'timestamp':
+                val = new Date(parseInt(val));
                 break;
         }
 

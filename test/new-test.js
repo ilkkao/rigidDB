@@ -81,7 +81,8 @@ describe('Constructor', function() {
                         color: 'string',
                         year: 'int',
                         convertible: 'boolean',
-                        purchaseDate: 'date'
+                        purchaseDate: 'date',
+                        created: 'timestamp'
                     },
                     indices: [{
                         uniq: true,
