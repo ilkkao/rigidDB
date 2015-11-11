@@ -6,7 +6,7 @@ const debug = require('debug')('code'),
 
 let cachedScripts = {};
 
-function ObjectStore(prefix, schema) {
+function ObjectStore(prefix, schema, opts) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
     }
@@ -57,7 +57,15 @@ function ObjectStore(prefix, schema) {
 
     this.prefix = prefix;
     this.schema = schema || {};
-    this.client = new Redis();
+
+    opts = opts || {};
+
+    this.client = new Redis({
+        port: opts.port || undefined,
+        host: opts.host || undefined,
+        password: opts.password || undefined,
+        db: opts.db || undefined
+    });
 }
 
 ObjectStore.prototype.create = function(type, attrs) {
