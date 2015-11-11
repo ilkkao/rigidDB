@@ -80,7 +80,7 @@ describe('Create', function() {
             color: 'blue',
             mileage: 12345,
             convertible: true,
-            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: 1
@@ -92,7 +92,7 @@ describe('Create', function() {
                 color: 'blue',
                 mileage: '12345',
                 convertible: 'true',
-                purchaseDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').toString()
             });
 
             return redisClient.smembers('foo:car:ids');
@@ -105,9 +105,9 @@ describe('Create', function() {
 
             return redisClient.hgetall('foo:car:index:purchaseDate');
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                'Sun Nov 01 2015 17::41::24 GMT+0100 (CET)': '1'
-            });
+            let dateResult = {};
+            dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').toString().replace(/:/g, '::')] = '1';
+            expect(result).to.deep.equal(dateResult);
 
             return redisClient.smembers('foo:car:index:color:convertible:mileage:blue:true:12345');
         }).then(function(result) {
