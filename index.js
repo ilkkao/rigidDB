@@ -177,6 +177,8 @@ ObjectStore.prototype._exec = function(ctx) {
 
         if (command === 'GET') {
             val = that._denormalizeAttrs(ret[3], val);
+        } else if (command === 'EXISTS') {
+            val = !!val // Lua returns 0 (not found) or 1 (found)
         } else if (command === 'GETALLIDS' || command === 'FINDALL') {
             val = val.map(item => parseInt(item));
         } else if (command === 'UPDATE' || command === 'DELETE' || command === 'none') {
@@ -285,8 +287,8 @@ ObjectStore.prototype._get = function(ctx, type, id) {
 
 ObjectStore.prototype._exists = function(ctx, type, id) {
     genCode(ctx, `local key = '${this.prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'E_MISSING' } end`);
-    genCode(ctx, `ret = { 'EXISTS', 'E_NONE' }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'E_NONE', 0 } end`);
+    genCode(ctx, `ret = { 'EXISTS', 'E_NONE', 1 }`);
 
     pushParams(ctx, id);
 }
