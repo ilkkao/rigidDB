@@ -116,7 +116,7 @@ describe('Update', function() {
                 purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString()
             });
 
-            return redisClient.smembers('foo:car:ids');
+            return redisClient.zrange('foo:car:ids', 0, -1);
         }).then(function(result) {
             expect(result).to.deep.equal([ id.toString() ]);
 

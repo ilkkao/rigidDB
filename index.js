@@ -237,7 +237,7 @@ ObjectStore.prototype._create = function(ctx, collection, attrs) {
     this._addIndices(ctx, collection, 'CREATE');
 
     genCode(ctx, `hmset(key, values)`);
-    genCode(ctx, `redis.call('SADD', '${this.prefix}:${collection}:ids', id)`);
+    genCode(ctx, `redis.call('ZADD', '${this.prefix}:${collection}:ids', id, id)`);
 
     genCode(ctx, `ret = { 'CREATE', 'E_NONE', id }`);
 }
@@ -281,7 +281,7 @@ ObjectStore.prototype._delete = function(ctx, collection, id) {
 
     this._removeIndices(ctx, collection, 'DELETE');
 
-    genCode(ctx, `redis.call('SREM', '${this.prefix}:${collection}:ids', id)`);
+    genCode(ctx, `redis.call('ZREM', '${this.prefix}:${collection}:ids', id)`);
     genCode(ctx, `redis.call('DEL', key)`);
     genCode(ctx, `ret = { 'DELETE', 'E_NONE' }`);
 
@@ -307,12 +307,12 @@ ObjectStore.prototype._exists = function(ctx, collection, id) {
 ObjectStore.prototype._size = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'E_NONE', 0 } end`);
-    genCode(ctx, `ret = { 'SIZE', 'E_NONE', redis.call('SCARD', key) }`);
+    genCode(ctx, `ret = { 'SIZE', 'E_NONE', redis.call('ZCARD', key) }`);
 }
 
 ObjectStore.prototype._list = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
-    genCode(ctx, `ret = { 'LIST', 'E_NONE', redis.call("SMEMBERS", key) }`);
+    genCode(ctx, `ret = { 'LIST', 'E_NONE', redis.call("ZRANGE", key, 0, -1) }`);
 }
 
 ObjectStore.prototype._find = function(ctx, collection, attrs) {
