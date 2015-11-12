@@ -489,10 +489,6 @@ function pushParams(ctx, params) {
     }
 }
 
-function escape(str) {
-    return str.replace(/:/g, '::');
-}
-
 function onlyLetters(str) {
     return /^[a-zA-Z]+$/.test(str);
 }

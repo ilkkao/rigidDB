@@ -129,7 +129,6 @@ describe('Legacy', function() {
         });
     });
 
-
     it("find gold objects", function() {
         return store.findAll('car', { color: 'gold' }).then(function(result) {
             expect(result).to.deep.equal({
