@@ -42,6 +42,8 @@ function ObjectStore(prefix, schema, opts) {
             }
         }
 
+        collection.indices = collection.indices || [];
+
         for (let index of collection.indices) {
             if (!(index.uniq === true || index.uniq === false)) {
                 throw('Invalid or missing index unique definition');
@@ -207,7 +209,7 @@ ObjectStore.prototype._exec = function(ctx) {
 }
 
 ObjectStore.prototype._findIndex = function(collection, searchParams) {
-    let indices = this.schema[collection].indices || [];
+    let indices = this.schema[collection].indices;
     let searchFields = Object.keys(searchParams).sort().join();
 
     for (let index of indices) {
@@ -339,7 +341,7 @@ ObjectStore.prototype._genIndex = function(ctx, collection, attrs) {
 }
 
 ObjectStore.prototype._genAllIndices = function(ctx, collection) {
-    let indices = this.schema[collection].indices || [];
+    let indices = this.schema[collection].indices;
     let redisIndices = [];
 
     // { name: "color:mileage", value: 'red:423423', uniq: false }

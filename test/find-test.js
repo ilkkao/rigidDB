@@ -9,6 +9,8 @@ let redisClient = new Redis({
 });
 
 let store;
+let secondStore;
+
 let id;
 
 describe('Find', function() {
@@ -94,6 +96,39 @@ describe('Find', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: 1
+            });
+        });
+    });
+
+    it('Fails if there are no indices', function() {
+        secondStore = new ObjectStore('foo', {
+                car: {
+                    definition: {
+                        color: 'string',
+                        mileage: 'int',
+                        convertible: 'boolean',
+                        purchaseDate: 'date'
+                    }
+                }
+            }, {
+                db: 15
+            });
+
+        return secondStore.create('car', {
+            color: 'blue',
+            mileage: 12345,
+            convertible: true,
+            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            return secondStore.find('car', {
+                color: 'blue',
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                err: 'E_INDEX',
+                command: 'FIND',
+                val: false
             });
         });
     });
