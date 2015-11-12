@@ -126,20 +126,20 @@ ObjectStore.prototype.multi = function(cb) {
     return this._exec(ctx);
 };
 
-ObjectStore.prototype.find = function(collection, searchParams) {
-    if (this._findIndex(collection, searchParams) !== 'uniq') {
+ObjectStore.prototype.find = function(collection, searchAttrs) {
+    if (this._findIndex(collection, searchAttrs) !== 'uniq') {
         return Promise.resolve({ val: false, err: 'E_INDEX', command: 'FIND' });
     }
 
-    return this._execSingle(this._find, 'FIND', collection, searchParams);
+    return this._execSingle(this._find, 'FIND', collection, searchAttrs);
 };
 
-ObjectStore.prototype.findAll = function(collection, searchParams) {
-    if (this._findIndex(collection, searchParams) !== 'nonUniq') {
+ObjectStore.prototype.findAll = function(collection, searchAttrs) {
+    if (this._findIndex(collection, searchAttrs) !== 'nonUniq') {
         return Promise.resolve({ val: false, err: 'E_INDEX', command: 'FINDALL' });
     }
 
-    return this._execSingle(this._findAll, 'FINDALL', collection, searchParams);
+    return this._execSingle(this._findAll, 'FINDALL', collection, searchAttrs);
 };
 
 ObjectStore.prototype._execSingle = function() {
@@ -208,9 +208,9 @@ ObjectStore.prototype._exec = function(ctx) {
     }
 }
 
-ObjectStore.prototype._findIndex = function(collection, searchParams) {
+ObjectStore.prototype._findIndex = function(collection, searchAttrs) {
     let indices = this.schema[collection].indices;
-    let searchFields = Object.keys(searchParams).sort().join();
+    let searchFields = Object.keys(searchAttrs).sort().join();
 
     for (let index of indices) {
         if (index.fields.sort().join() === searchFields) {
