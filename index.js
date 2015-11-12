@@ -484,11 +484,7 @@ function genCode(ctx, lua) {
 }
 
 function pushParams(ctx, params) {
-    if (Object.prototype.toString.call(params) === '[object Array]') {
-        ctx.params = ctx.params.concat(params);
-    } else {
-        ctx.params.push(params);
-    }
+    ctx.params.push(params);
 }
 
 function onlyLetters(str) {
