@@ -69,7 +69,7 @@ describe('Size', function() {
     it('Get size for invalid type', function() {
         return store.size('bikes').then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_TYPE',
+                err: 'E_COLLECTION',
                 command: 'SIZE',
                 val: false
             });

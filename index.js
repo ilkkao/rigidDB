@@ -68,32 +68,32 @@ function ObjectStore(prefix, schema, opts) {
     });
 }
 
-ObjectStore.prototype.create = function(type, attrs) {
-    return this._execSingle(this._create, 'CREATE', type, attrs);
+ObjectStore.prototype.create = function(collection, attrs) {
+    return this._execSingle(this._create, 'CREATE', collection, attrs);
 };
 
-ObjectStore.prototype.update = function(type, id, attrs) {
-    return this._execSingle(this._update, 'UPDATE', type, id, attrs);
+ObjectStore.prototype.update = function(collection, id, attrs) {
+    return this._execSingle(this._update, 'UPDATE', collection, id, attrs);
 };
 
-ObjectStore.prototype.delete = function(type, id) {
-    return this._execSingle(this._delete, 'DELETE', type, id);
+ObjectStore.prototype.delete = function(collection, id) {
+    return this._execSingle(this._delete, 'DELETE', collection, id);
 };
 
-ObjectStore.prototype.get = function(type, id) {
-    return this._execSingle(this._get, 'GET', type, id);
+ObjectStore.prototype.get = function(collection, id) {
+    return this._execSingle(this._get, 'GET', collection, id);
 };
 
-ObjectStore.prototype.exists = function(type, id) {
-    return this._execSingle(this._exists, 'EXISTS', type, id);
+ObjectStore.prototype.exists = function(collection, id) {
+    return this._execSingle(this._exists, 'EXISTS', collection, id);
 };
 
-ObjectStore.prototype.list = function(type) {
-    return this._execSingle(this._list, 'LIST', type);
+ObjectStore.prototype.list = function(collection) {
+    return this._execSingle(this._list, 'LIST', collection);
 };
 
-ObjectStore.prototype.size = function(type) {
-    return this._execSingle(this._size, 'SIZE', type);
+ObjectStore.prototype.size = function(collection) {
+    return this._execSingle(this._size, 'SIZE', collection);
 };
 
 ObjectStore.prototype.multi = function(cb) {
@@ -106,11 +106,11 @@ ObjectStore.prototype.multi = function(cb) {
     }.bind(this);
 
     let api = {
-        create: (type, attrs) => execute('_create', [ type, attrs ]),
-        update: (type, id, attrs) => execute('_update', [ type, id, attrs ]),
-        delete: (type, id) => execute('_delete', [ type, id ]),
-        get: (type, id) => execute('_get', [ type, id ]),
-        exists: (type, id) => execute('_exists', [ type, id ])
+        create: (collection, attrs) => execute('_create', [ collection, attrs ]),
+        update: (collection, id, attrs) => execute('_update', [ collection, id, attrs ]),
+        delete: (collection, id) => execute('_delete', [ collection, id ]),
+        get: (collection, id) => execute('_get', [ collection, id ]),
+        exists: (collection, id) => execute('_exists', [ collection, id ])
     };
 
     cb(api);
@@ -118,32 +118,32 @@ ObjectStore.prototype.multi = function(cb) {
     return this._exec(ctx);
 };
 
-ObjectStore.prototype.find = function(type, searchParams) {
-    if (this._findIndex(type, searchParams) !== 'uniq') {
+ObjectStore.prototype.find = function(collection, searchParams) {
+    if (this._findIndex(collection, searchParams) !== 'uniq') {
         return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
     }
 
-    return this._execSingle(this._find, 'FIND', type, searchParams);
+    return this._execSingle(this._find, 'FIND', collection, searchParams);
 };
 
-ObjectStore.prototype.findAll = function(type, searchParams) {
-    if (this._findIndex(type, searchParams) !== 'nonUniq') {
+ObjectStore.prototype.findAll = function(collection, searchParams) {
+    if (this._findIndex(collection, searchParams) !== 'nonUniq') {
         return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
     }
 
-    return this._execSingle(this._findAll, 'FINDALL', type, searchParams);
+    return this._execSingle(this._findAll, 'FINDALL', collection, searchParams);
 };
 
 ObjectStore.prototype._execSingle = function() {
     let args = Array.prototype.slice.call(arguments);
     let command = args.shift();
     let commandName = args.shift();
-    let type = args[0];
+    let collection = args[0];
 
     let ctx = newContext();
 
-    if (!this.schema[type]) {
-        ctx.error = { command: commandName, err: 'E_TYPE' };
+    if (!this.schema[collection]) {
+        ctx.error = { command: commandName, err: 'E_COLLECTION' };
     } else {
         args.unshift(ctx);
         command.apply(this, args);
@@ -198,8 +198,8 @@ ObjectStore.prototype._exec = function(ctx) {
     }
 }
 
-ObjectStore.prototype._findIndex = function(type, searchParams) {
-    let indices = this.schema[type].indices || [];
+ObjectStore.prototype._findIndex = function(collection, searchParams) {
+    let indices = this.schema[collection].indices || [];
     let searchFields = Object.keys(searchParams).sort().join();
 
     for (let index of indices) {
@@ -211,33 +211,33 @@ ObjectStore.prototype._findIndex = function(type, searchParams) {
     return false;
 }
 
-ObjectStore.prototype._create = function(ctx, type, attrs) {
-    let redisAttrs = this._normalizeAttrs(type, attrs)
+ObjectStore.prototype._create = function(ctx, collection, attrs) {
+    let redisAttrs = this._normalizeAttrs(collection, attrs)
 
-    if (Object.keys(this.schema[type].definition).length !== Object.keys(redisAttrs).length) {
+    if (Object.keys(this.schema[collection].definition).length !== Object.keys(redisAttrs).length) {
         ctx.error = { command: 'CREATE', err: 'E_PARAMS' };
         return;
     }
 
-    genCode(ctx, `local id = redis.call('INCR', '${this.prefix}:${type}:nextid')`);
-    genCode(ctx, `local key = '${this.prefix}:${type}:' .. id`);
+    genCode(ctx, `local id = redis.call('INCR', '${this.prefix}:${collection}:nextid')`);
+    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
     this._addValuesVar(ctx, redisAttrs);
 
-    this._addIndices(ctx, type, 'CREATE');
+    this._addIndices(ctx, collection, 'CREATE');
 
     genCode(ctx, `hmset(key, values)`);
-    genCode(ctx, `redis.call('SADD', '${this.prefix}:${type}:ids', id)`);
+    genCode(ctx, `redis.call('SADD', '${this.prefix}:${collection}:ids', id)`);
 
     genCode(ctx, `ret = { 'CREATE', 'E_NONE', id }`);
 }
 
-ObjectStore.prototype._update = function(ctx, type, id, attrs) {
-    let redisAttrs = this._normalizeAttrs(type, attrs)
+ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
+    let redisAttrs = this._normalizeAttrs(collection, attrs)
 
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     pushParams(ctx, id);
 
-    genCode(ctx, `local key = '${this.prefix}:${type}:' .. id`);
+    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'UPDATE', 'E_MISSING' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
@@ -246,99 +246,99 @@ ObjectStore.prototype._update = function(ctx, type, id, attrs) {
         pushParams(ctx, redisAttrs[prop]);
     }
 
-    this._assertUniqIndicesFree(ctx, type, 'UPDATE');
+    this._assertUniqIndicesFree(ctx, collection, 'UPDATE');
 
     genCode(ctx, `values = hgetall(key)`);
-    this._removeIndices(ctx, type, 'UPDATE')
+    this._removeIndices(ctx, collection, 'UPDATE')
 
     for (let prop in redisAttrs) {
         genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
         pushParams(ctx, redisAttrs[prop]);
     }
 
-    this._addIndices(ctx, type, 'UPDATE');
+    this._addIndices(ctx, collection, 'UPDATE');
 
     genCode(ctx, `hmset(key, values)`);
     genCode(ctx, `ret = { 'UPDATE', 'E_NONE', true }`);
 }
 
-ObjectStore.prototype._delete = function(ctx, type, id) {
+ObjectStore.prototype._delete = function(ctx, collection, id) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `local key = '${this.prefix}:${type}:' .. id`);
+    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'DELETE', 'E_MISSING' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
-    this._removeIndices(ctx, type, 'DELETE');
+    this._removeIndices(ctx, collection, 'DELETE');
 
-    genCode(ctx, `redis.call('SREM', '${this.prefix}:${type}:ids', id)`);
+    genCode(ctx, `redis.call('SREM', '${this.prefix}:${collection}:ids', id)`);
     genCode(ctx, `redis.call('DEL', key)`);
     genCode(ctx, `ret = { 'DELETE', 'E_NONE' }`);
 
     pushParams(ctx, id);
 }
 
-ObjectStore.prototype._get = function(ctx, type, id) {
-    genCode(ctx, `local key = '${this.prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
+ObjectStore.prototype._get = function(ctx, collection, id) {
+    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'GET', 'E_MISSING' } end`);
-    genCode(ctx, `ret = { 'GET', 'E_NONE', redis.call('HGETALL', key), '${type}' }`);
+    genCode(ctx, `ret = { 'GET', 'E_NONE', redis.call('HGETALL', key), '${collection}' }`);
 
     pushParams(ctx, id);
 }
 
-ObjectStore.prototype._exists = function(ctx, type, id) {
-    genCode(ctx, `local key = '${this.prefix}:${type}:' .. ARGV[${ctx.paramCounter++}]`);
+ObjectStore.prototype._exists = function(ctx, collection, id) {
+    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'E_NONE', 0 } end`);
     genCode(ctx, `ret = { 'EXISTS', 'E_NONE', 1 }`);
 
     pushParams(ctx, id);
 }
 
-ObjectStore.prototype._size = function(ctx, type) {
-    genCode(ctx, `local key = '${this.prefix}:${type}:ids'`);
+ObjectStore.prototype._size = function(ctx, collection) {
+    genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'E_NONE', 0 } end`);
     genCode(ctx, `ret = { 'SIZE', 'E_NONE', redis.call('SCARD', key) }`);
 }
 
-ObjectStore.prototype._list = function(ctx, type) {
-    genCode(ctx, `local key = '${this.prefix}:${type}:ids'`);
+ObjectStore.prototype._list = function(ctx, collection) {
+    genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
     genCode(ctx, `ret = { 'LIST', 'E_NONE', redis.call("SMEMBERS", key) }`);
 }
 
-ObjectStore.prototype._find = function(ctx, type, attrs) {
-    let ret = this._genIndex(ctx, type, attrs);
+ObjectStore.prototype._find = function(ctx, collection, attrs) {
+    let ret = this._genIndex(ctx, collection, attrs);
 
     genCode(ctx, `ret = { 'FIND', 'E_NONE', redis.call('HGET', ${ret.name}, ${ret.prop}) }`);
 }
 
-ObjectStore.prototype._findAll = function(ctx, type, attrs) {
-    let ret = this._genIndex(ctx, type, attrs);
+ObjectStore.prototype._findAll = function(ctx, collection, attrs) {
+    let ret = this._genIndex(ctx, collection, attrs);
 
     genCode(ctx, `ret = { 'FINDALL', 'E_NONE', redis.call('SMEMBERS', '${ret.name}:' .. ${ret.prop}) }`);
 }
 
-ObjectStore.prototype._genIndex = function(ctx, type, attrs) {
-    let redisAttrs = this._normalizeAttrs(type, attrs)
+ObjectStore.prototype._genIndex = function(ctx, collection, attrs) {
+    let redisAttrs = this._normalizeAttrs(collection, attrs)
 
     this._addValuesVar(ctx, redisAttrs);
 
     let fields = Object.keys(redisAttrs);
 
     return {
-        name: this._indexName(type, fields),
-        prop: this._indexValues(type, fields)
+        name: this._indexName(collection, fields),
+        prop: this._indexValues(fields)
     }
 }
 
-ObjectStore.prototype._genAllIndices = function(ctx, type) {
-    let indices = this.schema[type].indices || [];
+ObjectStore.prototype._genAllIndices = function(ctx, collection) {
+    let indices = this.schema[collection].indices || [];
     let redisIndices = [];
 
-    // { name: "color:mileage", value: 'red:423423' }
+    // { name: "color:mileage", value: 'red:423423', uniq: false }
 
     for (let index of indices) {
         redisIndices.push({
-            name: this._indexName(type, index.fields),
-            value: this._indexValues(type, index.fields),
+            name: this._indexName(collection, index.fields),
+            value: this._indexValues(index.fields),
             uniq: index.uniq
         });
     }
@@ -346,17 +346,17 @@ ObjectStore.prototype._genAllIndices = function(ctx, type) {
     return redisIndices;
 }
 
-ObjectStore.prototype._indexName = function(type, fields) {
-    return `${this.prefix}:${type}:index:${fields.sort().join(':')}`;
+ObjectStore.prototype._indexName = function(collection, fields) {
+    return `${this.prefix}:${collection}:index:${fields.sort().join(':')}`;
 }
 
-ObjectStore.prototype._indexValues = function(type, fields) {
+ObjectStore.prototype._indexValues = function(fields) {
     // Lua gsub returns two values. Extra parenthesis are used to discard the second value.
     return fields.sort().map(field => `(string.gsub(values["${field}"], ':', '::'))`).join(`..':'..`);
 }
 
-ObjectStore.prototype._assertUniqIndicesFree = function(ctx, type, command) {
-    let redisIndices = this._genAllIndices(ctx, type);
+ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, command) {
+    let redisIndices = this._genAllIndices(ctx, collection);
 
     for (let index of redisIndices) {
         if (index.uniq) {
@@ -370,8 +370,8 @@ ObjectStore.prototype._assertUniqIndicesFree = function(ctx, type, command) {
     return redisIndices;
 }
 
-ObjectStore.prototype._addIndices = function(ctx, type, command) {
-    let redisIndices = this._assertUniqIndicesFree(ctx, type, command);
+ObjectStore.prototype._addIndices = function(ctx, collection, command) {
+    let redisIndices = this._assertUniqIndicesFree(ctx, collection, command);
 
     for (let redisIndex of redisIndices) {
         if (redisIndex.uniq) {
@@ -382,8 +382,8 @@ ObjectStore.prototype._addIndices = function(ctx, type, command) {
     }
 }
 
-ObjectStore.prototype._removeIndices = function(ctx, type) {
-    let redisIndices = this._genAllIndices(ctx, type);
+ObjectStore.prototype._removeIndices = function(ctx, collection) {
+    let redisIndices = this._genAllIndices(ctx, collection);
 
     for (let redisIndex of redisIndices) {
         if (redisIndex.uniq) {
@@ -405,11 +405,11 @@ ObjectStore.prototype._addValuesVar = function(ctx, attrs) {
     genCode(ctx, `}`);
 }
 
-ObjectStore.prototype._normalizeAttrs = function(type, attrs) {
+ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
     let redisAttrs = {};
 
     for (let prop in attrs) {
-        let propType = this.schema[type].definition[prop];
+        let propType = this.schema[collection].definition[prop];
         let propVal = attrs[prop];
         let redisVal;
 
@@ -439,13 +439,13 @@ ObjectStore.prototype._normalizeAttrs = function(type, attrs) {
     return redisAttrs;
 }
 
-ObjectStore.prototype._denormalizeAttrs = function(type, redisRetVal) {
+ObjectStore.prototype._denormalizeAttrs = function(collection, redisRetVal) {
     let ret = {};
 
     while (redisRetVal.length > 0) {
         let prop = redisRetVal.shift();
         let val = redisRetVal.shift();
-        let propType = this.schema[type].definition[prop]
+        let propType = this.schema[collection].definition[prop]
 
         switch (propType) {
             case 'boolean':
