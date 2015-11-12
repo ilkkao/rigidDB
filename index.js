@@ -88,8 +88,8 @@ ObjectStore.prototype.exists = function(type, id) {
     return this._execSingle(this._exists, 'EXISTS', type, id);
 };
 
-ObjectStore.prototype.getAllIds = function(type) {
-    return this._execSingle(this._getAllIds, 'GETALLIDS', type);
+ObjectStore.prototype.list = function(type) {
+    return this._execSingle(this._list, 'LIST', type);
 };
 
 ObjectStore.prototype.size = function(type) {
@@ -179,7 +179,7 @@ ObjectStore.prototype._exec = function(ctx) {
             val = that._denormalizeAttrs(ret[3], val);
         } else if (command === 'EXISTS') {
             val = !!val // Lua returns 0 (not found) or 1 (found)
-        } else if (command === 'GETALLIDS' || command === 'FINDALL') {
+        } else if (command === 'LIST' || command === 'FINDALL') {
             val = val.map(item => parseInt(item));
         } else if (command === 'UPDATE' || command === 'DELETE' || command === 'none') {
             val = true;
@@ -299,9 +299,9 @@ ObjectStore.prototype._size = function(ctx, type) {
     genCode(ctx, `ret = { 'SIZE', 'E_NONE', redis.call('SCARD', key) }`);
 }
 
-ObjectStore.prototype._getAllIds = function(ctx, type) {
+ObjectStore.prototype._list = function(ctx, type) {
     genCode(ctx, `local key = '${this.prefix}:${type}:ids'`);
-    genCode(ctx, `ret = { 'GETALLIDS', 'E_NONE', redis.call("SMEMBERS", key) }`);
+    genCode(ctx, `ret = { 'LIST', 'E_NONE', redis.call("SMEMBERS", key) }`);
 }
 
 ObjectStore.prototype._find = function(ctx, type, attrs) {

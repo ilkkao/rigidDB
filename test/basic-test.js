@@ -65,7 +65,7 @@ describe('Legacy', function() {
     });
 
     it("get all object ids", function() {
-        return store.getAllIds('car').then(function(result) {
+        return store.list('car').then(function(result) {
             expect(result).to.deep.equal({
                 val: [ 1, 2 ]
             });
