@@ -120,7 +120,7 @@ ObjectStore.prototype.multi = function(cb) {
 
 ObjectStore.prototype.find = function(collection, searchParams) {
     if (this._findIndex(collection, searchParams) !== 'uniq') {
-        return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
+        return Promise.resolve({ val: false, err: 'E_INDEX', command: 'FIND' });
     }
 
     return this._execSingle(this._find, 'FIND', collection, searchParams);
@@ -128,7 +128,7 @@ ObjectStore.prototype.find = function(collection, searchParams) {
 
 ObjectStore.prototype.findAll = function(collection, searchParams) {
     if (this._findIndex(collection, searchParams) !== 'nonUniq') {
-        return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
+        return Promise.resolve({ val: false, err: 'E_INDEX', command: 'FINDALL' });
     }
 
     return this._execSingle(this._findAll, 'FINDALL', collection, searchParams);
@@ -179,6 +179,8 @@ ObjectStore.prototype._exec = function(ctx) {
             val = that._denormalizeAttrs(ret[3], val);
         } else if (command === 'EXISTS') {
             val = !!val // Lua returns 0 (not found) or 1 (found)
+        } else if (command === 'FIND') {
+            val = val ? parseInt(val) : false;
         } else if (command === 'LIST' || command === 'FINDALL') {
             val = val.map(item => parseInt(item));
         } else if (command === 'UPDATE' || command === 'DELETE' || command === 'none') {
@@ -307,7 +309,7 @@ ObjectStore.prototype._list = function(ctx, collection) {
 ObjectStore.prototype._find = function(ctx, collection, attrs) {
     let ret = this._genIndex(ctx, collection, attrs);
 
-    genCode(ctx, `ret = { 'FIND', 'E_NONE', redis.call('HGET', ${ret.name}, ${ret.prop}) }`);
+    genCode(ctx, `ret = { 'FIND', 'E_NONE', redis.call('HGET', '${ret.name}', ${ret.prop}) }`);
 }
 
 ObjectStore.prototype._findAll = function(ctx, collection, attrs) {
