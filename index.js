@@ -293,6 +293,12 @@ ObjectStore.prototype._exists = function(ctx, type, id) {
     pushParams(ctx, id);
 }
 
+ObjectStore.prototype._size = function(ctx, type) {
+    genCode(ctx, `local key = '${this.prefix}:${type}:ids'`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'E_NONE', 0 } end`);
+    genCode(ctx, `ret = { 'SIZE', 'E_NONE', redis.call('SCARD', key) }`);
+}
+
 ObjectStore.prototype._getAllIds = function(ctx, type) {
     genCode(ctx, `local key = '${this.prefix}:${type}:ids'`);
     genCode(ctx, `ret = { 'GETALLIDS', 'E_NONE', redis.call("SMEMBERS", key) }`);
