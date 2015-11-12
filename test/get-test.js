@@ -20,7 +20,8 @@ describe('Get', function() {
                         color: 'string',
                         mileage: 'int',
                         convertible: 'boolean',
-                        purchaseDate: 'date'
+                        purchaseDate: 'date',
+                        purchaseTs: 'timestamp'
                     },
                     indices: [{
                         uniq: true,
@@ -38,7 +39,8 @@ describe('Get', function() {
                 color: 'blue',
                 mileage: 12345,
                 convertible: true,
-                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),
+                purchaseTs: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
             id = result.val;
@@ -66,7 +68,8 @@ describe('Get', function() {
                     color: 'blue',
                     mileage: 12345,
                     convertible: true,
-                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),
+                    purchaseTs: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
                 }
             });
 
