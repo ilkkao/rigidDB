@@ -69,31 +69,31 @@ function ObjectStore(prefix, schema, opts) {
 }
 
 ObjectStore.prototype.create = function(type, attrs) {
-    return this._execSingle(this._create, type, attrs);
+    return this._execSingle(this._create, 'CREATE', type, attrs);
 };
 
 ObjectStore.prototype.update = function(type, id, attrs) {
-    return this._execSingle(this._update, type, id, attrs);
+    return this._execSingle(this._update, 'UPDATE', type, id, attrs);
 };
 
 ObjectStore.prototype.delete = function(type, id) {
-    return this._execSingle(this._remove, type, id);
+    return this._execSingle(this._delete, 'DELETE', type, id);
 };
 
 ObjectStore.prototype.get = function(type, id) {
-    return this._execSingle(this._get, type, id);
+    return this._execSingle(this._get, 'GET', type, id);
 };
 
 ObjectStore.prototype.exists = function(type, id) {
-    return this._execSingle(this._exists, type, id);
+    return this._execSingle(this._exists, 'EXISTS', type, id);
 };
 
 ObjectStore.prototype.getAllIds = function(type) {
-    return this._execSingle(this._getAllIds, type);
+    return this._execSingle(this._getAllIds, 'GETALLIDS', type);
 };
 
 ObjectStore.prototype.size = function(type) {
-    return this._execSingle(this._size, type);
+    return this._execSingle(this._size, 'SIZE', type);
 };
 
 ObjectStore.prototype.multi = function(cb) {
@@ -123,7 +123,7 @@ ObjectStore.prototype.find = function(type, searchParams) {
         return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
     }
 
-    return this._execSingle(this._find, type, searchParams);
+    return this._execSingle(this._find, 'FIND', type, searchParams);
 };
 
 ObjectStore.prototype.findAll = function(type, searchParams) {
@@ -131,16 +131,23 @@ ObjectStore.prototype.findAll = function(type, searchParams) {
         return Promise.resolve({ val: false, err: 'E_SEARCH', command: 'FINDALL' });
     }
 
-    return this._execSingle(this._findAll, type, searchParams);
+    return this._execSingle(this._findAll, 'FINDALL', type, searchParams);
 };
 
 ObjectStore.prototype._execSingle = function() {
     let args = Array.prototype.slice.call(arguments);
     let command = args.shift();
+    let commandName = args.shift();
+    let type = args[0];
+
     let ctx = newContext();
 
-    args.unshift(ctx);
-    command.apply(this, args);
+    if (!this.schema[type]) {
+        ctx.error = { command: commandName, err: 'E_TYPE' };
+    } else {
+        args.unshift(ctx);
+        command.apply(this, args);
+    }
 
     return this._exec(ctx);
 }
