@@ -121,52 +121,10 @@ describe('Legacy', function() {
         });
     });
 
-    it("empty multi", function() {
-        return store.multi(function() {}).then(function(result) {
+    it("find blue objects", function() {
+        return store.findAll('car', { color: 'blue' }).then(function(result) {
             expect(result).to.deep.equal({
-                val: true
-            });
-        });
-    });
-
-    it("multi containing invalid create", function() {
-        return store.multi(function(tr) {
-            tr.create('car', { color: 'black' });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                err: 'E_PARAMS',
-                val: false,
-                command: "CREATE"
-            });
-        });
-    });
-
-    it("multi", function() {
-        return store.multi(function(tr) {
-            tr.create('car', {
-                color: 'red',
-                mileage: 42,
-                inUse: true,
-                purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-            });
-            tr.update('car', 3, { color: 'white' });
-            tr.get('car', 3);
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: {
-                    color: 'white',
-                    mileage: 42,
-                    inUse: true,
-                    purchased: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-                }
-            });
-        });
-    });
-
-    it("find black objects", function() {
-        return store.findAll('car', { color: 'white' }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: [ 3 ]
+                val: [ 1 ]
             });
         });
     });
