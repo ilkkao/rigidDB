@@ -99,18 +99,24 @@ ObjectStore.prototype.size = function(collection) {
 ObjectStore.prototype.multi = function(cb) {
     let ctx = newContext();
 
-    const execute = function(op, args) {
+    const execute = function(op, commandName, args) {
+        let collection = args[0];
+
+        if (!this.schema[collection]) {
+            ctx.error = { command: commandName, err: 'E_COLLECTION' };
+        }
+
         if (!ctx.error) {
             this[op].apply(this, [ ctx ].concat(args));
         }
     }.bind(this);
 
     let api = {
-        create: (collection, attrs) => execute('_create', [ collection, attrs ]),
-        update: (collection, id, attrs) => execute('_update', [ collection, id, attrs ]),
-        delete: (collection, id) => execute('_delete', [ collection, id ]),
-        get: (collection, id) => execute('_get', [ collection, id ]),
-        exists: (collection, id) => execute('_exists', [ collection, id ])
+        create: (collection, attrs) => execute('_create', 'CREATE', [ collection, attrs ]),
+        update: (collection, id, attrs) => execute('_update', 'UPDATE', [ collection, id, attrs ]),
+        delete: (collection, id) => execute('_delete', 'DELETE', [ collection, id ]),
+        get: (collection, id) => execute('_get', 'GET', [ collection, id ]),
+        exists: (collection, id) => execute('_exists', 'EXISTS', [ collection, id ])
     };
 
     cb(api);
@@ -216,7 +222,8 @@ ObjectStore.prototype._findIndex = function(collection, searchParams) {
 ObjectStore.prototype._create = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs)
 
-    if (Object.keys(this.schema[collection].definition).length !== Object.keys(redisAttrs).length) {
+    if (Object.keys(this.schema[collection].definition).sort().join(':') !==
+        Object.keys(redisAttrs).sort().join(':')) {
         ctx.error = { command: 'CREATE', err: 'E_PARAMS' };
         return;
     }

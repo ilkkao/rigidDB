@@ -147,4 +147,32 @@ describe('Multi', function() {
             expect(result).to.have.length(0);
         });
     });
+
+    it('failed create cancels multi', function() {
+        return store.multi(function(tr) {
+            tr.create('bikes', {
+                color: 'red',
+                mileage: 42,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
+            tr.create('car', {
+                color: 'red',
+                mileage: 42,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'CREATE',
+                err: 'E_COLLECTION',
+                val: false
+            });
+
+            return redisClient.keys('*');
+        }).then(function(result) {
+            expect(result).to.have.length(0);
+        });
+    });
+
 });
