@@ -358,7 +358,7 @@ ObjectStore.prototype._genAllIndices = function(ctx, collection) {
 }
 
 ObjectStore.prototype._indexName = function(collection, fields) {
-    return `${this.prefix}:${collection}:index:${fields.sort().join(':')}`;
+    return `${this.prefix}:${collection}:i:${fields.sort().join(':')}`;
 }
 
 ObjectStore.prototype._indexValues = function(fields) {

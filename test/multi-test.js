@@ -92,13 +92,13 @@ describe('Multi', function() {
         }).then(function(result) {
             expect(result).to.equal('1');
 
-            return redisClient.hgetall('foo:car:index:purchaseDate');
+            return redisClient.hgetall('foo:car:i:purchaseDate');
         }).then(function(result) {
             let dateResult = {};
             dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.smembers('foo:car:index:color:convertible:mileage:white:true:42');
+            return redisClient.smembers('foo:car:i:color:convertible:mileage:white:true:42');
         }).then(function(result) {
             expect(result).to.deep.equal([ '1' ]);
 
