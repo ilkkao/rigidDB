@@ -75,7 +75,7 @@ describe('Create', function() {
         });
     });
 
-    it('Redis is updated correctly ', function() {
+    it('Redis is updated correctly', function() {
         return store.create('car', {
             color: 'blue',
             mileage: 12345,
