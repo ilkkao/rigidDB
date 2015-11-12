@@ -56,7 +56,7 @@ function ObjectStore(prefix, schema, opts) {
     }
 
     this.prefix = prefix;
-    this.schema = schema || {};
+    this.schema = schema;
 
     opts = opts || {};
 
@@ -433,9 +433,7 @@ ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
                 break;
         }
 
-        if (typeof(redisVal) !== 'undefined') {
-            redisAttrs[prop] = redisVal;
-        }
+        redisAttrs[prop] = redisVal;
     }
 
     return redisAttrs;
