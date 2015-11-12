@@ -179,7 +179,7 @@ ObjectStore.prototype._exec = function(ctx) {
             val = that._denormalizeAttrs(ret[3], val);
         } else if (command === 'GETALLIDS' || command === 'FINDALL') {
             val = val.map(item => parseInt(item));
-        } else if (command === 'UPDATE' || command === 'REMOVE' || command === 'none') {
+        } else if (command === 'UPDATE' || command === 'DELETE' || command === 'none') {
             val = true;
         }
 
@@ -260,17 +260,17 @@ ObjectStore.prototype._update = function(ctx, type, id, attrs) {
     genCode(ctx, `ret = { 'UPDATE', 'E_NONE', true }`);
 }
 
-ObjectStore.prototype._remove = function(ctx, type, id) {
+ObjectStore.prototype._delete = function(ctx, type, id) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `local key = '${this.prefix}:${type}:' .. id`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'REMOVE', 0 } end`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'DELETE', 'E_MISSING' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
-    this._removeIndices(ctx, type, 'REMOVE');
+    this._removeIndices(ctx, type, 'DELETE');
 
     genCode(ctx, `redis.call('SREM', '${this.prefix}:${type}:ids', id)`);
     genCode(ctx, `redis.call('DEL', key)`);
-    genCode(ctx, `ret = { 'REMOVE', 'E_NONE' }`);
+    genCode(ctx, `ret = { 'DELETE', 'E_NONE' }`);
 
     pushParams(ctx, id);
 }
