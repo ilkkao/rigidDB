@@ -8,10 +8,12 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store = new ObjectStore('foo', { db: 15 });
+let store;
 
 describe('Multi', function() {
     beforeEach(function() {
+        store = new ObjectStore('foo', { db: 15 });
+
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {

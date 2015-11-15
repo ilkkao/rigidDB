@@ -8,12 +8,14 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store = new ObjectStore('foo', { db: 15 });
+let store;
 let id;
 
 describe('List', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
+            store = new ObjectStore('foo', { db: 15 });
+
             return store.setSchema({
                 car: {
                     definition: {

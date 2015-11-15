@@ -8,10 +8,12 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store = new ObjectStore('foo', { db: 15 });
+let store;
 
 describe('Create', function() {
     beforeEach(function() {
+        store = new ObjectStore('foo', { db: 15 });
+
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {
@@ -29,6 +31,10 @@ describe('Create', function() {
                         fields: [ 'color', 'mileage', 'convertible' ]
                     }]
                 }
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: '2ea7c9c97651bf3415d70ba73fe8b92936bc95e1'
             });
         });
     });

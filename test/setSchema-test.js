@@ -124,7 +124,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: true
+                val: '8f8e7f3a957940ba9f1e04483485a18a12071652'
             });
         });
     });

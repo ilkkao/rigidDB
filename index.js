@@ -13,7 +13,6 @@ function ObjectStore(prefix, opts) {
 
     this.prefix = prefix;
     this.schemaLoading = true;
-    this.cancelSchemaLoading = false;
     this.schema = null;
 
     opts = opts || {};
@@ -28,7 +27,7 @@ function ObjectStore(prefix, opts) {
     this.schemaPromise = this.client.get(`${prefix}:_schema`).then(function(result) {
         this.schemaLoading = false;
 
-        if (result && !this.cancelSchemaLoading) {
+        if (result) {
             this.schema = JSON.parse(result);
             return true;
         }
@@ -38,20 +37,38 @@ function ObjectStore(prefix, opts) {
 }
 
 ObjectStore.prototype.setSchema = function(schema) {
+    if (this.schemaLoading) {
+        return this.schemaPromise.then(function() {
+            return this._setSchema(schema);
+        }.bind(this))
+    } else {
+        return this._setSchema(schema);
+    }
+};
+
+ObjectStore.prototype._setSchema = function(schema) {
     schema = this._verifySchema(schema);
 
     if (typeof(schema) == 'string') {
         return Promise.resolve({ val: false, reason: schema, command: 'SETSCHEMA' });
     }
 
-    this.schema = schema;
+    let schemaJSON = JSON.stringify(schema);
+    let schemaJSONHash = crypto.createHash('sha1').update(schemaJSON).digest('hex');
 
-    if (this.schemaLoading) {
-        this.cancelSchemaLoading = true;
+    if (this.schema) {
+        let currentSchemaJSON = JSON.stringify(this.schema);
+        let currentSchemaJSONHash = crypto.createHash('sha1').update(currentSchemaJSON).digest('hex');
+
+        if (schemaJSONHash !== currentSchemaJSONHash) {
+            return Promise.resolve({ val: false, reason: 'Schema already exists', command: 'SETSCHEMA'});
+        }
     }
 
-    return this.client.set(`${this.prefix}:_schema`, JSON.stringify(schema)).then(function(result) {
-        return { val: true };
+    this.schema = schema;
+
+    return this.client.set(`${this.prefix}:_schema`, schemaJSON).then(function(result) {
+        return { val: schemaJSONHash };
     });
 };
 
@@ -107,6 +124,25 @@ ObjectStore.prototype._verifySchema = function(schema) {
     return schema;
 };
 
+ObjectStore.prototype.getSchemaHash = function() {
+    if (this.schemaLoading) {
+        return this.schemaPromise.then(function() {
+            return this._getSchemaHash(schema);
+        }.bind(this))
+    } else {
+        return this._getSchemaHash(schema);
+    }
+};
+
+ObjectStore.prototype._getSchemaHash = function() {
+    if (this.schema) {
+        return Promise.resolve({ val: false, err: 'E_NOSCHEMA', command: 'GETSCHEMAHASH'});
+    } else {
+        let schemaJSON = JSON.stringify(schema);
+        return Promise.resolve({ val: crypto.createHash('sha1').update(schemaJSON).digest('hex') });
+    }
+};
+
 ObjectStore.prototype.create = function(collection, attrs) {
     return this._execSingle(this._create, 'CREATE', collection, attrs);
 };
@@ -117,10 +153,6 @@ ObjectStore.prototype.update = function(collection, id, attrs) {
 
 ObjectStore.prototype.delete = function(collection, id) {
     return this._execSingle(this._delete, 'DELETE', collection, id);
-};
-
-ObjectStore.prototype.deleteAll = function(collection) {
-    return this._execSingle(this._deleteAll, 'DELETEALL', collection, id);
 };
 
 ObjectStore.prototype.get = function(collection, id) {

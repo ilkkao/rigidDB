@@ -10,7 +10,9 @@
 ```javascript
 const ObjectStore = require('object-store');
 
-let store = new ObjectStore('foo', {
+let store = new ObjectStore('mySchema');
+
+store.setSchema({
     car: {
         definition: {
             color: 'string',
@@ -26,11 +28,8 @@ let store = new ObjectStore('foo', {
             fields: [ 'color', 'mileage' ]
         }]
     }
-}, {
-    db: 15
-});
-
-store.create('car', {
+}).then(function(schemaId) {
+    return store.create('car', {
         color: 'blue',
         mileage: 12345,
         convertible: true,
@@ -50,7 +49,11 @@ store.create('car', {
 
 ## API
 
-### new ObjectStore(prefix, definition, options)
+### new ObjectStore(options, redisOptions)
+
+### setSchema(schemaDefinition)
+
+### getSchemaHash()
 
 ### create(collection, attributes)
 
