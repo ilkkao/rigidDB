@@ -127,19 +127,20 @@ ObjectStore.prototype._verifySchema = function(schema) {
 ObjectStore.prototype.getSchemaHash = function() {
     if (this.schemaLoading) {
         return this.schemaPromise.then(function() {
-            return this._getSchemaHash(schema);
+            return this._getSchemaHash();
         }.bind(this))
     } else {
-        return this._getSchemaHash(schema);
+        return this._getSchemaHash();
     }
 };
 
 ObjectStore.prototype._getSchemaHash = function() {
-    if (this.schema) {
+    if (!this.schema) {
         return Promise.resolve({ val: false, err: 'E_NOSCHEMA', command: 'GETSCHEMAHASH'});
     } else {
-        let schemaJSON = JSON.stringify(schema);
-        return Promise.resolve({ val: crypto.createHash('sha1').update(schemaJSON).digest('hex') });
+        let schemaJSON = JSON.stringify(this.schema);
+        let schemaJSONHash = crypto.createHash('sha1').update(schemaJSON).digest('hex');
+        return Promise.resolve({ val: schemaJSONHash });
     }
 };
 

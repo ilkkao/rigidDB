@@ -175,4 +175,15 @@ describe('Multi', function() {
         });
     });
 
+    it('multi before setSchema fails', function() {
+        store = new ObjectStore('bar', { db: 15 });
+
+        return store.multi(function() {}).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'MULTI',
+                err: 'E_NOSCHEMA',
+                val: false
+            });
+        });
+    });
 });

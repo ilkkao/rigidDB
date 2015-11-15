@@ -128,4 +128,83 @@ describe('SetSchema', function() {
             });
         });
     });
+
+    it('Same schema can be set twice', function() {
+        store = new ObjectStore('bar', { db: 15 });
+
+        return store.setSchema({
+            cars: {
+                definition: {
+                    color: 'string',
+                    purchaseDate: 'date',
+                },
+                indices: [{
+                    uniq: true,
+                    fields: [ 'purchaseDate' ]
+                }]
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 'c4d1e63c21175dd62bf576509ef50f45df3eef92'
+            });
+
+            return store.setSchema({
+                cars: {
+                    definition: {
+                        color: 'string',
+                        purchaseDate: 'date',
+                    },
+                    indices: [{
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    }]
+                }
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 'c4d1e63c21175dd62bf576509ef50f45df3eef92'
+            });
+        });
+    });
+
+    it('Set Schema can\'t be modified', function() {
+        store = new ObjectStore('baz', { db: 15 });
+
+        return store.setSchema({
+            cars: {
+                definition: {
+                    color: 'string',
+                    purchaseDate: 'date',
+                },
+                indices: [{
+                    uniq: true,
+                    fields: [ 'purchaseDate' ]
+                }]
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 'c4d1e63c21175dd62bf576509ef50f45df3eef92'
+            });
+
+            return store.setSchema({
+                cars: {
+                    definition: {
+                        color: 'string',
+                        purchaseDate: 'date',
+                        make: 'string'
+                    },
+                    indices: [{
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    }]
+                }
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'SETSCHEMA',
+                reason: 'Schema already exists',
+                val: false
+            });
+        });
+    });
 });

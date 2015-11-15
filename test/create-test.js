@@ -136,4 +136,37 @@ describe('Create', function() {
             expect(result).to.have.length(6);
         });
     });
+
+    it('Succeeds if the schema is set earlier', function() {
+        let secondStore = new ObjectStore('foo', { db: 15 });
+
+        return secondStore.create('car', {
+            color: 'white',
+            mileage: 12345,
+            convertible: true,
+            purchaseDate: new Date('Sun Nov 15 2015 17:41:24 GMT+0000 (UTC)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 1
+            });
+        });
+    });
+
+    it('Fails if the schema is not set', function() {
+        let secondStore = new ObjectStore('baz', { db: 15 });
+
+        return secondStore.create('car', {
+            color: 'white',
+            mileage: 12345,
+            convertible: true,
+            purchaseDate: new Date('Sun Nov 15 2015 17:41:24 GMT+0000 (UTC)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+              command: 'CREATE',
+              err: 'E_NOSCHEMA',
+              val: false
+            });
+        });
+    });
+
 });
