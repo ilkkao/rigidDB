@@ -81,3 +81,11 @@ store.setSchema({
 ### find(collection, searchAttributes)
 
 ### findAll(collection, searchAttributes)
+
+## Supported data types
+
+- Boolean
+- Integer
+- String
+- Date
+- Unix timestamp
