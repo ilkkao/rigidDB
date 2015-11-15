@@ -36,6 +36,10 @@ function ObjectStore(prefix, opts) {
     }.bind(this));
 }
 
+ObjectStore.prototype.quit = function(schema) {
+    return this.client.quit();
+};
+
 ObjectStore.prototype.setSchema = function(schema) {
     if (this.schemaLoading) {
         return this.schemaPromise.then(function() {

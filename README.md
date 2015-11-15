@@ -82,6 +82,8 @@ store.setSchema({
 
 ### findAll(collection, searchAttributes)
 
+### quit()
+
 ## Supported data types
 
 - Boolean
