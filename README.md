@@ -8,19 +8,19 @@ A promise based node module for saving searchable plain JavaScript objects to Re
 
 ## Status:
 
-[![Build Status](https://secure.travis-ci.org/ilkkao/object-store.png)](http://travis-ci.org/ilkkao/object-store)
+[![Build Status](https://secure.travis-ci.org/ilkkao/redis-objectdb.png)](http://travis-ci.org/ilkkao/redis-objectdb)
 
-[![Coverage Status](https://coveralls.io/repos/ilkkao/object-store/badge.svg?branch=master&service=github)](https://coveralls.io/github/ilkkao/object-store?branch=master)
+[![Coverage Status](https://coveralls.io/repos/ilkkao/redis-objectdb/badge.svg?branch=master&service=github)](https://coveralls.io/github/ilkkao/redis-objectdb?branch=master)
 
 ## Example
 
 ```javascript
-const ObjectStore = require('object-store');
+const RedisObjectDB = require('redis-objectdb');
 
-let store = new ObjectStore('mySchema');
+let store = new RedisObjectDB('mydb');
 
 store.setSchema({
-    car: {
+    cars: {
         definition: {
             color: 'string',
             mileage: 'int',
@@ -36,14 +36,14 @@ store.setSchema({
         }]
     }
 }).then(function(schemaId) {
-    return store.create('car', {
+    return store.create('cars', {
         color: 'blue',
         mileage: 12345,
         convertible: true,
         purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
     })
 }).then(function(id) {
-    return store.get(id);
+    return store.find('cars', id);
 }).then(function(object) {
     // object = {
     //     color: 'blue',
@@ -56,7 +56,7 @@ store.setSchema({
 
 ## API
 
-### new ObjectStore(options, redisOptions)
+### new RedisObjectDB(options, redisOptions)
 
 ### setSchema(schemaDefinition)
 
