@@ -8,12 +8,12 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store;
+let store = new ObjectStore('foo', { db: 15 });
 
 describe('Multi', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new ObjectStore('foo', {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -29,8 +29,6 @@ describe('Multi', function() {
                         fields: [ 'color', 'mileage', 'convertible' ]
                     }]
                 }
-            }, {
-                db: 15
             });
         });
     });
@@ -104,7 +102,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(5);
+            expect(result).to.have.length(6);
         });
     });
 
@@ -124,7 +122,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(1);
+            expect(result).to.have.length(2);
         });
     });
 
@@ -144,7 +142,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(0);
+            expect(result).to.have.length(1);
         });
     });
 
@@ -171,7 +169,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(0);
+            expect(result).to.have.length(1);
         });
     });
 

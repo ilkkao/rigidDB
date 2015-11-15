@@ -8,12 +8,12 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store;
+let store = new ObjectStore('foo', { db: 15 });
 
 describe('Create', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new ObjectStore('foo', {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -29,8 +29,20 @@ describe('Create', function() {
                         fields: [ 'color', 'mileage', 'convertible' ]
                     }]
                 }
-            }, {
-                db: 15
+            });
+        });
+    });
+
+    it('Fails if collection is missing', function() {
+        return store.create('bikes', {
+            color: 'blue',
+            mileage: 12345,
+            convertible: true,
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'CREATE',
+                err: 'E_COLLECTION',
+                val: false
             });
         });
     });
@@ -115,7 +127,7 @@ describe('Create', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(5);
+            expect(result).to.have.length(6);
         });
     });
 });

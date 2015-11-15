@@ -8,13 +8,13 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store;
+let store = new ObjectStore('foo', { db: 15 });
 let id;
 
 describe('Delete', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new ObjectStore('foo', {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -30,10 +30,8 @@ describe('Delete', function() {
                         fields: [ 'color', 'mileage', 'convertible' ]
                     }]
                 }
-            }, {
-                db: 15
-            });
-
+            })
+        }).then(function(result) {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
@@ -71,7 +69,7 @@ describe('Delete', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(1);
+            expect(result).to.have.length(2);
         });
     });
 });

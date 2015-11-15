@@ -8,13 +8,13 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store;
+let store = new ObjectStore('foo', { db: 15 });
 let id;
 
 describe('Get', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new ObjectStore('foo', {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -31,10 +31,8 @@ describe('Get', function() {
                         fields: [ 'color', 'mileage', 'convertible' ]
                     }]
                 }
-            }, {
-                db: 15
             });
-
+        }).then(function() {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
@@ -57,7 +55,7 @@ describe('Get', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(5);
+            expect(result).to.have.length(6);
         });
     });
 
@@ -75,7 +73,7 @@ describe('Get', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(5);
+            expect(result).to.have.length(6);
         });
     });
 });

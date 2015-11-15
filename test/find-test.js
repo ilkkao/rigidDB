@@ -8,7 +8,7 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store;
+let store = new ObjectStore('foo', { db: 15 });
 let secondStore;
 
 let id;
@@ -16,7 +16,7 @@ let id;
 describe('Find', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new ObjectStore('foo', {
+            store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -32,10 +32,8 @@ describe('Find', function() {
                         fields: [ 'color', 'mileage', 'convertible' ]
                     }]
                 }
-            }, {
-                db: 15
             });
-
+        }).then(function(result) {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
@@ -101,24 +99,24 @@ describe('Find', function() {
     });
 
     it('Fails if there are no indices', function() {
-        secondStore = new ObjectStore('foo', {
-                car: {
-                    definition: {
-                        color: 'string',
-                        mileage: 'int',
-                        convertible: 'boolean',
-                        purchaseDate: 'date'
-                    }
-                }
-            }, {
-                db: 15
-            });
+        secondStore = new ObjectStore('anotherFoo', { db: 15 });
 
-        return secondStore.create('car', {
-            color: 'blue',
-            mileage: 12345,
-            convertible: true,
-            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        return secondStore.setSchema({
+            car: {
+                definition: {
+                    color: 'string',
+                    mileage: 'int',
+                    convertible: 'boolean',
+                    purchaseDate: 'date'
+                }
+            }
+        }).then(function(result) {
+            return secondStore.create('car', {
+                color: 'blue',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
         }).then(function(result) {
             return secondStore.find('car', {
                 color: 'blue',

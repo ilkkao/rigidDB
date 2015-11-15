@@ -6,59 +6,15 @@ const debug = require('debug')('code'),
 
 let cachedScripts = {};
 
-function ObjectStore(prefix, schema, opts) {
+function ObjectStore(prefix, opts) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
     }
 
-    if (typeof(schema) !== 'object') {
-        throw('Invalid schema.');
-    }
-
-    let collections = Object.keys(schema);
-
-    if (collections.length === 0) {
-        throw('At least one collection must be defined.');
-    }
-
-    for (let collectionName of collections) {
-        let collection = schema[collectionName];
-
-        if (!collection.definition) {
-            throw('Definition missing.');
-        }
-
-        let fieldNames = Object.keys(collection.definition)
-
-        for (let fieldName of fieldNames) {
-            if (!onlyLetters(fieldName)) {
-                throw(`Invalid field name: '${fieldName}'`);
-            }
-
-            let type = collection.definition[fieldName];
-
-            if (!/^(string|int|boolean|date|timestamp)$/.test(type)) {
-                throw(`Invalid type: '${type}'`);
-            }
-        }
-
-        collection.indices = collection.indices || [];
-
-        for (let index of collection.indices) {
-            if (!(index.uniq === true || index.uniq === false)) {
-                throw('Invalid or missing index unique definition');
-            }
-
-            for (let field of index.fields) {
-                if (fieldNames.indexOf(field) === -1) {
-                    throw(`Invalid index field: '${field}'`);
-                }
-            }
-        }
-    }
-
     this.prefix = prefix;
-    this.schema = schema;
+    this.schemaLoading = true;
+    this.cancelSchemaLoading = false;
+    this.schema = null;
 
     opts = opts || {};
 
@@ -68,7 +24,88 @@ function ObjectStore(prefix, schema, opts) {
         password: opts.password || undefined,
         db: opts.db || undefined
     });
+
+    this.schemaPromise = this.client.get(`${prefix}:_schema`).then(function(result) {
+        this.schemaLoading = false;
+
+        if (result && !this.cancelSchemaLoading) {
+            this.schema = JSON.parse(result);
+            return true;
+        }
+
+        return false;
+    }.bind(this));
 }
+
+ObjectStore.prototype.setSchema = function(schema) {
+    schema = this._verifySchema(schema);
+
+    if (typeof(schema) == 'string') {
+        return Promise.resolve({ val: false, reason: schema, command: 'SETSCHEMA' });
+    }
+
+    this.schema = schema;
+
+    if (this.schemaLoading) {
+        this.cancelSchemaLoading = true;
+    }
+
+    return this.client.set(`${this.prefix}:_schema`, JSON.stringify(schema)).then(function(result) {
+        return { val: true };
+    });
+};
+
+ObjectStore.prototype._verifySchema = function(schema) {
+    let error = false;
+
+    if (typeof(schema) !== 'object') {
+        return 'Invalid schema.';
+    }
+
+    let collections = Object.keys(schema);
+
+    if (collections.length === 0) {
+        return 'At least one collection must be defined.';
+    }
+
+    for (let collectionName of collections) {
+        let collection = schema[collectionName];
+
+        if (!collection.definition) {
+            return 'Definition missing.';
+        }
+
+        let fieldNames = Object.keys(collection.definition)
+
+        for (let fieldName of fieldNames) {
+            if (!onlyLetters(fieldName)) {
+                return `Invalid field name: '${fieldName}'`;
+            }
+
+            let type = collection.definition[fieldName];
+
+            if (!/^(string|int|boolean|date|timestamp)$/.test(type)) {
+                return `Invalid type: '${type}'`;
+            }
+        }
+
+        collection.indices = collection.indices || [];
+
+        for (let index of collection.indices) {
+            if (!(index.uniq === true || index.uniq === false)) {
+                return 'Invalid or missing index unique definition';
+            }
+
+            for (let field of index.fields) {
+                if (fieldNames.indexOf(field) === -1) {
+                    return `Invalid index field: '${field}'`;
+                }
+            }
+        }
+    }
+
+    return schema;
+};
 
 ObjectStore.prototype.create = function(collection, attrs) {
     return this._execSingle(this._create, 'CREATE', collection, attrs);
@@ -80,6 +117,10 @@ ObjectStore.prototype.update = function(collection, id, attrs) {
 
 ObjectStore.prototype.delete = function(collection, id) {
     return this._execSingle(this._delete, 'DELETE', collection, id);
+};
+
+ObjectStore.prototype.deleteAll = function(collection) {
+    return this._execSingle(this._deleteAll, 'DELETEALL', collection, id);
 };
 
 ObjectStore.prototype.get = function(collection, id) {
@@ -99,46 +140,52 @@ ObjectStore.prototype.size = function(collection) {
 };
 
 ObjectStore.prototype.multi = function(cb) {
+    if (this.schemaLoading) {
+        return this.schemaPromise.then(function() {
+           return this._execMultiNow(cb);
+        }.bind(this));
+    } else {
+        return this._execMultiNow(cb);
+    }
+};
+
+ObjectStore.prototype._execMultiNow = function(cb) {
     let ctx = newContext();
 
-    const execute = function(op, commandName, args) {
-        let collection = args[0];
+    if (!this.schema) {
+        ctx.error = { command: 'MULTI', err: 'E_NOSCHEMA' };
+    } else {
+        const execute = function(op, commandName, args) {
+            let collection = args[0];
 
-        if (!this.schema[collection]) {
-            ctx.error = { command: commandName, err: 'E_COLLECTION' };
-        }
+            if (!this.schema[collection]) {
+                ctx.error = { command: commandName, err: 'E_COLLECTION' };
+            }
 
-        if (!ctx.error) {
-            this[op].apply(this, [ ctx ].concat(args));
-        }
-    }.bind(this);
+            if (!ctx.error) {
+                this[op].apply(this, [ ctx ].concat(args));
+            }
+        }.bind(this);
 
-    let api = {
-        create: (collection, attrs) => execute('_create', 'CREATE', [ collection, attrs ]),
-        update: (collection, id, attrs) => execute('_update', 'UPDATE', [ collection, id, attrs ]),
-        delete: (collection, id) => execute('_delete', 'DELETE', [ collection, id ]),
-        get: (collection, id) => execute('_get', 'GET', [ collection, id ]),
-        exists: (collection, id) => execute('_exists', 'EXISTS', [ collection, id ])
-    };
+        let api = {
+            create: (collection, attrs) => execute('_create', 'CREATE', [ collection, attrs ]),
+            update: (collection, id, attrs) => execute('_update', 'UPDATE', [ collection, id, attrs ]),
+            delete: (collection, id) => execute('_delete', 'DELETE', [ collection, id ]),
+            get: (collection, id) => execute('_get', 'GET', [ collection, id ]),
+            exists: (collection, id) => execute('_exists', 'EXISTS', [ collection, id ])
+        };
 
-    cb(api);
+        cb(api);
+    }
 
     return this._exec(ctx);
 };
 
 ObjectStore.prototype.find = function(collection, searchAttrs) {
-    if (this._findIndex(collection, searchAttrs) !== 'uniq') {
-        return Promise.resolve({ val: false, err: 'E_INDEX', command: 'FIND' });
-    }
-
     return this._execSingle(this._find, 'FIND', collection, searchAttrs);
 };
 
 ObjectStore.prototype.findAll = function(collection, searchAttrs) {
-    if (this._findIndex(collection, searchAttrs) !== 'nonUniq') {
-        return Promise.resolve({ val: false, err: 'E_INDEX', command: 'FINDALL' });
-    }
-
     return this._execSingle(this._findAll, 'FINDALL', collection, searchAttrs);
 };
 
@@ -146,13 +193,28 @@ ObjectStore.prototype._execSingle = function() {
     let args = Array.prototype.slice.call(arguments);
     let command = args.shift();
     let commandName = args.shift();
-    let collection = args[0];
 
     let ctx = newContext();
 
-    if (!this.schema[collection]) {
-        ctx.error = { command: commandName, err: 'E_COLLECTION' };
+    if (this.schemaLoading) {
+        return this.schemaPromise.then(function() {
+           return this._execSingleNow(ctx, command, commandName, args);
+        }.bind(this));
     } else {
+        return this._execSingleNow(ctx, command, commandName, args);
+    }
+}
+
+ObjectStore.prototype._execSingleNow = function(ctx, command, commandName, args) {
+    let collection = args[0];
+
+    if (!this.schema) {
+        ctx.error = { command: commandName, err: 'E_NOSCHEMA' };
+    } else if (!this.schema[collection]) {
+        ctx.error = { command: commandName, err: 'E_COLLECTION' };
+    }
+
+    if (!ctx.error) {
         args.unshift(ctx);
         command.apply(this, args);
     }
@@ -316,12 +378,22 @@ ObjectStore.prototype._list = function(ctx, collection) {
 }
 
 ObjectStore.prototype._find = function(ctx, collection, attrs) {
+    if (this._findIndex(collection, attrs) !== 'uniq') {
+        ctx.error = { command: 'FIND', err: 'E_INDEX' };
+        return;
+    }
+
     let ret = this._genIndex(ctx, collection, attrs);
 
     genCode(ctx, `ret = { 'FIND', 'E_NONE', redis.call('HGET', '${ret.name}', ${ret.prop}) }`);
 }
 
 ObjectStore.prototype._findAll = function(ctx, collection, attrs) {
+    if (this._findIndex(collection, attrs) !== 'nonUniq') {
+        ctx.error = { command: 'FINDALL', err: 'E_INDEX' };
+        return;
+    }
+
     let ret = this._genIndex(ctx, collection, attrs);
 
     genCode(ctx, `ret = { 'FINDALL', 'E_NONE', redis.call('SMEMBERS', '${ret.name}:' .. ${ret.prop}) }`);
