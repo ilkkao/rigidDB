@@ -1,3 +1,10 @@
+# Redis ObjectDB
+
+A promise based node module for saving searchable plain JavaScript objects to Redis. All API methods are executed as atomic Lua transactions to avoid data corruption.
+
+## Installation
+
+`npm install --save redis-objectdb`
 
 ## Status:
 
