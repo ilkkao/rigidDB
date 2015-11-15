@@ -46,6 +46,62 @@ ObjectStore.prototype.setSchema = function(schema) {
     }
 };
 
+ObjectStore.prototype.getSchemaHash = function() {
+    if (this.schemaLoading) {
+        return this.schemaPromise.then(function() {
+            return this._getSchemaHash();
+        }.bind(this));
+    } else {
+        return this._getSchemaHash();
+    }
+};
+
+ObjectStore.prototype.create = function(collection, attrs) {
+    return this._execSingle(this._create, 'CREATE', collection, attrs);
+};
+
+ObjectStore.prototype.update = function(collection, id, attrs) {
+    return this._execSingle(this._update, 'UPDATE', collection, id, attrs);
+};
+
+ObjectStore.prototype.delete = function(collection, id) {
+    return this._execSingle(this._delete, 'DELETE', collection, id);
+};
+
+ObjectStore.prototype.get = function(collection, id) {
+    return this._execSingle(this._get, 'GET', collection, id);
+};
+
+ObjectStore.prototype.exists = function(collection, id) {
+    return this._execSingle(this._exists, 'EXISTS', collection, id);
+};
+
+ObjectStore.prototype.list = function(collection) {
+    return this._execSingle(this._list, 'LIST', collection);
+};
+
+ObjectStore.prototype.size = function(collection) {
+    return this._execSingle(this._size, 'SIZE', collection);
+};
+
+ObjectStore.prototype.multi = function(cb) {
+    if (this.schemaLoading) {
+        return this.schemaPromise.then(function() {
+            return this._execMultiNow(cb);
+        }.bind(this));
+    } else {
+        return this._execMultiNow(cb);
+    }
+};
+
+ObjectStore.prototype.find = function(collection, searchAttrs) {
+    return this._execSingle(this._find, 'FIND', collection, searchAttrs);
+};
+
+ObjectStore.prototype.findAll = function(collection, searchAttrs) {
+    return this._execSingle(this._findAll, 'FINDALL', collection, searchAttrs);
+};
+
 ObjectStore.prototype._setSchema = function(schema) {
     schema = this._verifySchema(schema);
 
@@ -122,16 +178,6 @@ ObjectStore.prototype._verifySchema = function(schema) {
     return schema;
 };
 
-ObjectStore.prototype.getSchemaHash = function() {
-    if (this.schemaLoading) {
-        return this.schemaPromise.then(function() {
-            return this._getSchemaHash();
-        }.bind(this));
-    } else {
-        return this._getSchemaHash();
-    }
-};
-
 ObjectStore.prototype._getSchemaHash = function() {
     if (!this.schema) {
         return Promise.resolve({ val: false, err: 'E_NOSCHEMA', command: 'GETSCHEMAHASH'});
@@ -139,44 +185,6 @@ ObjectStore.prototype._getSchemaHash = function() {
         let schemaJSON = JSON.stringify(this.schema);
         let schemaJSONHash = crypto.createHash('sha1').update(schemaJSON).digest('hex');
         return Promise.resolve({ val: schemaJSONHash });
-    }
-};
-
-ObjectStore.prototype.create = function(collection, attrs) {
-    return this._execSingle(this._create, 'CREATE', collection, attrs);
-};
-
-ObjectStore.prototype.update = function(collection, id, attrs) {
-    return this._execSingle(this._update, 'UPDATE', collection, id, attrs);
-};
-
-ObjectStore.prototype.delete = function(collection, id) {
-    return this._execSingle(this._delete, 'DELETE', collection, id);
-};
-
-ObjectStore.prototype.get = function(collection, id) {
-    return this._execSingle(this._get, 'GET', collection, id);
-};
-
-ObjectStore.prototype.exists = function(collection, id) {
-    return this._execSingle(this._exists, 'EXISTS', collection, id);
-};
-
-ObjectStore.prototype.list = function(collection) {
-    return this._execSingle(this._list, 'LIST', collection);
-};
-
-ObjectStore.prototype.size = function(collection) {
-    return this._execSingle(this._size, 'SIZE', collection);
-};
-
-ObjectStore.prototype.multi = function(cb) {
-    if (this.schemaLoading) {
-        return this.schemaPromise.then(function() {
-            return this._execMultiNow(cb);
-        }.bind(this));
-    } else {
-        return this._execMultiNow(cb);
     }
 };
 
@@ -210,14 +218,6 @@ ObjectStore.prototype._execMultiNow = function(cb) {
     }
 
     return this._exec(ctx);
-};
-
-ObjectStore.prototype.find = function(collection, searchAttrs) {
-    return this._execSingle(this._find, 'FIND', collection, searchAttrs);
-};
-
-ObjectStore.prototype.findAll = function(collection, searchAttrs) {
-    return this._execSingle(this._findAll, 'FINDALL', collection, searchAttrs);
 };
 
 ObjectStore.prototype._execSingle = function() {
