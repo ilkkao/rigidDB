@@ -141,7 +141,7 @@ describe('Create', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 

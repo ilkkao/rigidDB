@@ -55,7 +55,8 @@ describe('Update', function() {
             expect(result).to.deep.equal({
                 command: 'UPDATE',
                 err: 'E_MISSING',
-                val: false
+                val: false,
+                indices: []
             });
         });
     });
@@ -82,7 +83,7 @@ describe('Update', function() {
                 command: 'UPDATE',
                 err: 'E_INDEX',
                 val: false,
-                indices: 'first'
+                indices: [ 'first' ]
             });
         });
     });
