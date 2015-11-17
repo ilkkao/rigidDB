@@ -81,7 +81,8 @@ describe('Update', function() {
             expect(result).to.deep.equal({
                 command: 'UPDATE',
                 err: 'E_INDEX',
-                val: false
+                val: false,
+                indices: 'first'
             });
         });
     });

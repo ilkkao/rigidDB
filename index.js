@@ -279,7 +279,11 @@ ObjectStore.prototype._exec = function(ctx) {
         let val = ret[2];
 
         if (err != 'E_NONE') {
-            return { val: false, err: err, command: command };
+            if (command === 'CREATE' || command == 'UPDATE') {
+                return { val: false, err: err, command: command, indices: val || [] };
+            } else {
+                return { val: false, err: err, command: command };
+            }
         }
 
         if (command === 'GET') {
@@ -451,8 +455,9 @@ ObjectStore.prototype._genAllIndices = function(ctx, collection) {
         let index = indices[indexName];
 
         redisIndices.push({
-            name: this._indexName(collection, index.fields),
-            value: this._indexValues(index.fields),
+            name: indexName,
+            redisKey: this._indexName(collection, index.fields),
+            redisValue: this._indexValues(index.fields),
             uniq: index.uniq
         });
     }
@@ -470,40 +475,47 @@ ObjectStore.prototype._indexValues = function(fields) {
 };
 
 ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, command) {
-    let redisIndices = this._genAllIndices(ctx, collection);
+    let indices = this._genAllIndices(ctx, collection);
 
-    for (let index of redisIndices) {
+    genCode(ctx, `local nonUniqIndices, uniqError = {}, false`);
+
+    for (let index of indices) {
         if (index.uniq) {
-            genCode(ctx, `local currentIndex = redis.call('HGET', '${index.name}', ${index.value})`);
+            genCode(ctx, `local currentIndex = redis.call('HGET', '${index.redisKey}', ${index.redisValue})`);
             genCode(ctx, `if currentIndex and currentIndex ~= id then`);
-            genCode(ctx, `return { '${command}', 'E_INDEX' }`);
+            genCode(ctx, `table.insert(nonUniqIndices, '${index.name}')`)
+            genCode(ctx, `uniqError = true`)
             genCode(ctx, `end`);
         }
     }
 
-    return redisIndices;
+    genCode(ctx, `if uniqError then`);
+    genCode(ctx, `return { '${command}', 'E_INDEX', nonUniqIndices }`);
+    genCode(ctx, `end`);
+
+    return indices;
 };
 
 ObjectStore.prototype._addIndices = function(ctx, collection, command) {
-    let redisIndices = this._assertUniqIndicesFree(ctx, collection, command);
+    let indices = this._assertUniqIndicesFree(ctx, collection, command);
 
-    for (let redisIndex of redisIndices) {
-        if (redisIndex.uniq) {
-            genCode(ctx, `redis.call('HSET', '${redisIndex.name}', ${redisIndex.value}, id)`);
+    for (let index of indices) {
+        if (index.uniq) {
+            genCode(ctx, `redis.call('HSET', '${index.redisKey}', ${index.redisValue}, id)`);
         } else {
-            genCode(ctx, `redis.call('SADD', '${redisIndex.name}:' .. ${redisIndex.value}, id)`);
+            genCode(ctx, `redis.call('SADD', '${index.redisKey}:' .. ${index.redisValue}, id)`);
         }
     }
 };
 
 ObjectStore.prototype._removeIndices = function(ctx, collection) {
-    let redisIndices = this._genAllIndices(ctx, collection);
+    let indices = this._genAllIndices(ctx, collection);
 
-    for (let redisIndex of redisIndices) {
-        if (redisIndex.uniq) {
-            genCode(ctx, `redis.call('HDEL', '${redisIndex.name}', ${redisIndex.value})`);
+    for (let index of indices) {
+        if (index.uniq) {
+            genCode(ctx, `redis.call('HDEL', '${index.redisKey}', ${index.redisValue})`);
         } else {
-            genCode(ctx, `redis.call('SREM', '${redisIndex.name}:' .. ${redisIndex.value}, id)`);
+            genCode(ctx, `redis.call('SREM', '${index.redisKey}:' .. ${index.redisValue}, id)`);
         }
     }
 };

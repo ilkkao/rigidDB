@@ -24,20 +24,24 @@ describe('Create', function() {
                         purchaseDate: 'date'
                     },
                     indices: {
-                        purchase: {
+                        first: {
                             uniq: true,
                             fields: [ 'purchaseDate' ]
                         },
-                        details: {
+                        second: {
                             uniq: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
+                        },
+                        third: {
+                            uniq: true,
+                            fields: [ 'mileage', 'color' ]
                         }
                     }
                 }
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 'ad5ebc1aa4c1b6c6922b4512378ed76fbcd68b3c'
+                val: '00a9578e079cd369da5a020ddf7bfc036fb3f7e5'
             });
         });
     });
@@ -91,7 +95,8 @@ describe('Create', function() {
             expect(result).to.deep.equal({
                 command: 'CREATE',
                 err: 'E_INDEX',
-                val: false
+                val: false,
+                indices: [ 'first', 'third' ]
             });
         });
     });
