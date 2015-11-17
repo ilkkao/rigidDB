@@ -1,6 +1,6 @@
 {
   "name": "redis-objectdb",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Object store with an index",
   "main": "index.js",
   "scripts": {
