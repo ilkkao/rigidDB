@@ -37,19 +37,22 @@ describe('GetSchemaHash', function() {
                     purchaseDate: 'date',
                     created: 'timestamp'
                 },
-                indices: [{
-                    uniq: true,
-                    fields: [ 'purchaseDate' ]
-                }, {
-                    uniq: false,
-                    fields: [ 'color', 'year', 'convertible' ]
-                }]
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    },
+                    second: {
+                        uniq: false,
+                        fields: [ 'color', 'year', 'convertible' ]
+                    }
+                }
             }
         }).then(function(result) {
             return store.getSchemaHash();
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: '8f8e7f3a957940ba9f1e04483485a18a12071652'
+                val: '2ec78556eb49981297a8804603419571cd8eb055'
             });
         })
     });

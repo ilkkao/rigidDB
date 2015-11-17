@@ -23,18 +23,21 @@ describe('Create', function() {
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }, {
-                        uniq: false,
-                        fields: [ 'color', 'mileage', 'convertible' ]
-                    }]
+                    indices: {
+                        purchase: {
+                            uniq: true,
+                            fields: [ 'purchaseDate' ]
+                        },
+                        details: {
+                            uniq: false,
+                            fields: [ 'color', 'mileage', 'convertible' ]
+                        }
+                    }
                 }
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: '2ea7c9c97651bf3415d70ba73fe8b92936bc95e1'
+                val: 'ad5ebc1aa4c1b6c6922b4512378ed76fbcd68b3c'
             });
         });
     });

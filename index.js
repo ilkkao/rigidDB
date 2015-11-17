@@ -164,9 +164,11 @@ ObjectStore.prototype._verifySchema = function(schema) {
             }
         }
 
-        collection.indices = collection.indices || [];
+        collection.indices = collection.indices || {};
 
-        for (let index of collection.indices) {
+        for (let indexName in collection.indices) {
+            let index = collection.indices[indexName];
+
             if (!(index.uniq === true || index.uniq === false)) {
                 return 'Invalid or missing index unique definition';
             }
@@ -305,19 +307,6 @@ ObjectStore.prototype._exec = function(ctx) {
     }
 };
 
-ObjectStore.prototype._findIndex = function(collection, searchAttrs) {
-    let indices = this.schema[collection].indices;
-    let searchFields = Object.keys(searchAttrs).sort().join();
-
-    for (let index of indices) {
-        if (index.fields.sort().join() === searchFields) {
-            return index.uniq ? 'uniq' : 'nonUniq';
-        }
-    }
-
-    return false;
-};
-
 ObjectStore.prototype._create = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
@@ -413,38 +402,43 @@ ObjectStore.prototype._list = function(ctx, collection) {
 };
 
 ObjectStore.prototype._find = function(ctx, collection, attrs) {
-    if (this._findIndex(collection, attrs) !== 'uniq') {
-        ctx.error = { command: 'FIND', err: 'E_INDEX' };
-        return;
-    }
-
-    let ret = this._genIndex(ctx, collection, attrs);
-
-    genCode(ctx, `ret = { 'FIND', 'E_NONE', redis.call('HGET', '${ret.name}', ${ret.prop}) }`);
+    this._findCommon(ctx, collection, attrs, true, 'FIND');
 };
 
 ObjectStore.prototype._findAll = function(ctx, collection, attrs) {
-    if (this._findIndex(collection, attrs) !== 'nonUniq') {
-        ctx.error = { command: 'FINDALL', err: 'E_INDEX' };
+    this._findCommon(ctx, collection, attrs, false, 'FINDALL');
+};
+
+ObjectStore.prototype._findCommon = function(ctx, collection, attrs, uniqIndex, command) {
+    let indices = this.schema[collection].indices;
+    let searchFields = Object.keys(attrs).sort().join();
+    let indexFound = false;
+
+    for (let indexName in indices) {
+        let index = indices[indexName];
+
+        if (index.fields.sort().join() === searchFields && index.uniq === uniqIndex) {
+            indexFound = true;
+            break;
+        }
+    }
+
+    if (!indexFound) {
+        ctx.error = { command: command, err: 'E_INDEX' };
         return;
     }
 
-    let ret = this._genIndex(ctx, collection, attrs);
-
-    genCode(ctx, `ret = { 'FINDALL', 'E_NONE', redis.call('SMEMBERS', '${ret.name}:' .. ${ret.prop}) }`);
-};
-
-ObjectStore.prototype._genIndex = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     this._addValuesVar(ctx, redisAttrs);
 
     let fields = Object.keys(redisAttrs);
+    let name = this._indexName(collection, fields);
+    let prop = this._indexValues(fields);
+    let redisCommand = uniqIndex ? 'HGET' : 'SMEMBERS';
+    let redisParams =  uniqIndex ? `'${name}', ${prop}` : `'${name}:' .. ${prop}`
 
-    return {
-        name: this._indexName(collection, fields),
-        prop: this._indexValues(fields)
-    };
+    genCode(ctx, `ret = { '${command}', 'E_NONE', redis.call('${redisCommand}', ${redisParams}) }`);
 };
 
 ObjectStore.prototype._genAllIndices = function(ctx, collection) {
@@ -453,7 +447,9 @@ ObjectStore.prototype._genAllIndices = function(ctx, collection) {
 
     // { name: "color:mileage", value: 'red:423423', uniq: false }
 
-    for (let index of indices) {
+    for (let indexName in indices) {
+        let index = indices[indexName];
+
         redisIndices.push({
             name: this._indexName(collection, index.fields),
             value: this._indexValues(index.fields),

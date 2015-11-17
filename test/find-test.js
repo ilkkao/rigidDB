@@ -26,13 +26,16 @@ describe('Find', function() {
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate', 'color' ]
-                    }, {
-                        uniq: false,
-                        fields: [ 'color', 'mileage', 'convertible' ]
-                    }]
+                    indices: {
+                        first: {
+                            uniq: true,
+                            fields: [ 'purchaseDate', 'color' ]
+                        },
+                        second: {
+                            uniq: false,
+                            fields: [ 'color', 'mileage', 'convertible' ]
+                        }
+                    }
                 }
             });
         }).then(function(result) {

@@ -73,9 +73,11 @@ describe('SetSchema', function() {
         return store.setSchema({
             cars: {
                 definition: { color: 'string' },
-                indices: [{
-                    fields: [ 'color' ]
-                }]
+                indices: {
+                    first: {
+                        fields: [ 'color' ]
+                    }
+                }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
@@ -90,10 +92,12 @@ describe('SetSchema', function() {
         return store.setSchema({
             cars: {
                 definition: { color: 'string' },
-                indices: [{
-                    uniq: true,
-                    fields: [ 'color', 'mileage' ]
-                }]
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: [ 'color', 'mileage' ]
+                    }
+                }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
@@ -114,17 +118,20 @@ describe('SetSchema', function() {
                     purchaseDate: 'date',
                     created: 'timestamp'
                 },
-                indices: [{
-                    uniq: true,
-                    fields: [ 'purchaseDate' ]
-                }, {
-                    uniq: false,
-                    fields: [ 'color', 'year', 'convertible' ]
-                }]
+                indices: {
+                    date: {
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    },
+                    details: {
+                        uniq: false,
+                        fields: [ 'color', 'year', 'convertible' ]
+                    }
+                }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: '8f8e7f3a957940ba9f1e04483485a18a12071652'
+                val: 'fb916f33124621b821306571fcd9009199a55aec'
             });
         });
     });
@@ -138,14 +145,16 @@ describe('SetSchema', function() {
                     color: 'string',
                     purchaseDate: 'date',
                 },
-                indices: [{
-                    uniq: true,
-                    fields: [ 'purchaseDate' ]
-                }]
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    }
+                }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 'c4d1e63c21175dd62bf576509ef50f45df3eef92'
+                val: '86e891bf17af68dbf1d91404040ebfd63f6dea9a'
             });
 
             return store.setSchema({
@@ -154,15 +163,17 @@ describe('SetSchema', function() {
                         color: 'string',
                         purchaseDate: 'date',
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }]
+                    indices: {
+                        first: {
+                            uniq: true,
+                            fields: [ 'purchaseDate' ]
+                        }
+                    }
                 }
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 'c4d1e63c21175dd62bf576509ef50f45df3eef92'
+                val: '86e891bf17af68dbf1d91404040ebfd63f6dea9a'
             });
         });
     });
@@ -176,14 +187,16 @@ describe('SetSchema', function() {
                     color: 'string',
                     purchaseDate: 'date',
                 },
-                indices: [{
-                    uniq: true,
-                    fields: [ 'purchaseDate' ]
-                }]
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: [ 'purchaseDate' ]
+                    }
+                }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 'c4d1e63c21175dd62bf576509ef50f45df3eef92'
+                val: '86e891bf17af68dbf1d91404040ebfd63f6dea9a'
             });
 
             return store.setSchema({
@@ -193,10 +206,12 @@ describe('SetSchema', function() {
                         purchaseDate: 'date',
                         make: 'string'
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }]
+                    indices: {
+                        first: {
+                            uniq: true,
+                            fields: [ 'purchaseDate' ]
+                        }
+                    }
                 }
             });
         }).then(function(result) {

@@ -24,13 +24,16 @@ describe('Delete', function() {
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }, {
-                        uniq: false,
-                        fields: [ 'color', 'mileage', 'convertible' ]
-                    }]
+                    indices: {
+                        purchase: {
+                            uniq: true,
+                            fields: [ 'purchaseDate' ]
+                        },
+                        details: {
+                            uniq: false,
+                            fields: [ 'color', 'mileage', 'convertible' ]
+                        }
+                    }
                 }
             })
         }).then(function(result) {

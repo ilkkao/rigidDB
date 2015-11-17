@@ -24,13 +24,16 @@ describe('Update', function() {
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }, {
-                        uniq: false,
-                        fields: [ 'color', 'mileage', 'convertible' ]
-                    }]
+                    indices: {
+                        first: {
+                            uniq: true,
+                            fields: [ 'purchaseDate' ]
+                        },
+                        second: {
+                            uniq: false,
+                            fields: [ 'color', 'mileage', 'convertible' ]
+                        }
+                    }
                 }
             });
         }).then(function(result) {

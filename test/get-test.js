@@ -25,13 +25,16 @@ describe('Get', function() {
                         purchaseDate: 'date',
                         purchaseTs: 'timestamp'
                     },
-                    indices: [{
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }, {
-                        uniq: false,
-                        fields: [ 'color', 'mileage', 'convertible' ]
-                    }]
+                    indices: {
+                        first: {
+                            uniq: true,
+                            fields: [ 'purchaseDate' ]
+                        },
+                        second: {
+                            uniq: false,
+                            fields: [ 'color', 'mileage', 'convertible' ]
+                        }
+                    }
                 }
             });
         }).then(function() {
