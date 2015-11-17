@@ -27,13 +27,16 @@ store.setSchema({
             convertible: 'boolean',
             purchaseDate: 'date'
         },
-        indices: [{
-            uniq: true,
-            fields: [ 'purchaseDate', 'mileage' ]
-        }, {
-            uniq: false,
-            fields: [ 'color', 'mileage' ]
-        }]
+        indices: {
+            first: {
+                uniq: true,
+                fields: [ 'purchaseDate', 'mileage' ]
+            },
+            second: {
+                uniq: false,
+                fields: [ 'color', 'mileage' ]
+            }
+        }
     }
 }).then(function(schemaId) {
     return store.create('cars', {
