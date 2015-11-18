@@ -153,8 +153,8 @@ ObjectStore.prototype._verifySchema = function(schema) {
         let fieldNames = Object.keys(collection.definition);
 
         for (let fieldName of fieldNames) {
-            if (!onlyLetters(fieldName)) {
-                return `Invalid field name: '${fieldName}'`;
+            if (!onlyLettersNumbersDashes(fieldName)) {
+                return `Invalid field name (letters, numbers, and dashes allowed): '${fieldName}'`;
             }
 
             let type = collection.definition[fieldName];
@@ -611,6 +611,10 @@ function pushParams(ctx, params) {
 
 function onlyLetters(str) {
     return /^[a-zA-Z]+$/.test(str);
+}
+
+function onlyLettersNumbersDashes(str) {
+    return /^[a-zA-Z0-9_\-]+$/.test(str);
 }
 
 function utilityFuncs() {

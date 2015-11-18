@@ -47,7 +47,7 @@ describe('SetSchema', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'SETSCHEMA',
-                reason: 'Invalid field name: \'co:lor\'',
+                reason: 'Invalid field name (letters, numbers, and dashes allowed): \'co:lor\'',
                 val: false
             });
         });
@@ -114,7 +114,7 @@ describe('SetSchema', function() {
                 definition: {
                     color: 'string',
                     year: 'int',
-                    convertible: 'boolean',
+                    '9-convertible_32': 'boolean',
                     purchaseDate: 'date',
                     created: 'timestamp'
                 },
@@ -125,13 +125,13 @@ describe('SetSchema', function() {
                     },
                     details: {
                         uniq: false,
-                        fields: [ 'color', 'year', 'convertible' ]
+                        fields: [ 'color', 'year', '9-convertible_32' ]
                     }
                 }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 'fb916f33124621b821306571fcd9009199a55aec'
+                val: '851e767df2a7823514cea33734851ee51f8308e3'
             });
         });
     });
