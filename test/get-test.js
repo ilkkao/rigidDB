@@ -16,7 +16,7 @@ describe('Get', function() {
         return redisClient.flushdb().then(function() {
             store = new ObjectStore('foo', { db: 15 });
 
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -54,13 +54,13 @@ describe('Get', function() {
         return store.get('car', 4242).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'GET',
-                err: 'E_MISSING',
+                err: 'notFound',
                 val: false
             });
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 
@@ -78,7 +78,7 @@ describe('Get', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 });

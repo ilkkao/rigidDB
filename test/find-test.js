@@ -18,7 +18,7 @@ describe('Find', function() {
         return redisClient.flushdb().then(function() {
             store = new ObjectStore('foo', { db: 15 });
 
-            store.setSchema({
+            store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -60,7 +60,7 @@ describe('Find', function() {
             color: 'red'
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_INDEX',
+                err: 'unknownIndex',
                 command: 'FIND',
                 val: false
             });
@@ -74,7 +74,7 @@ describe('Find', function() {
             convertible: true
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_INDEX',
+                err: 'wrongIndexType',
                 command: 'FIND',
                 val: false
             });
@@ -106,7 +106,7 @@ describe('Find', function() {
     it('Fails if there are no indices', function() {
         secondStore = new ObjectStore('anotherFoo', { db: 15 });
 
-        return secondStore.setSchema({
+        return secondStore.setSchema(1, {
             car: {
                 definition: {
                     color: 'string',
@@ -129,7 +129,7 @@ describe('Find', function() {
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_INDEX',
+                err: 'unknownIndex',
                 command: 'FIND',
                 val: false
             });

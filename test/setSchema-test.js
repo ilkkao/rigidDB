@@ -17,8 +17,21 @@ describe('SetSchema', function() {
         });
     });
 
+    it('Circular reference', function() {
+        let schema = {};
+        schema.schema = schema;
+
+        return store.setSchema(1, schema).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'SETSCHEMA',
+                reason: 'Invalid schema.',
+                val: false
+            });
+        });
+    });
+
     it('Zero collections', function() {
-        return store.setSchema({}).then(function(result) {
+        return store.setSchema(1, {}).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'SETSCHEMA',
                 reason: 'At least one collection must be defined.',
@@ -28,7 +41,7 @@ describe('SetSchema', function() {
     });
 
     it('Missing collection definition', function() {
-        return store.setSchema({ cars: {} }).then(function(result) {
+        return store.setSchema(1, { cars: {} }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'SETSCHEMA',
                 reason: 'Definition missing.',
@@ -38,7 +51,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid collection field name', function() {
-        return store.setSchema({
+        return store.setSchema(1, {
             cars: {
                 definition: {
                     'co:lor': 'string'
@@ -54,7 +67,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid collection field type', function() {
-        return store.setSchema({
+        return store.setSchema(1, {
             cars: {
                 definition: {
                     color: 'wrong'
@@ -69,8 +82,24 @@ describe('SetSchema', function() {
         });
     });
 
+    it('Missing collection field type when object', function() {
+        return store.setSchema(1, {
+            cars: {
+                definition: {
+                    color: {}
+                }
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'SETSCHEMA',
+                reason: 'Type definition missing.',
+                val: false
+            });
+        });
+    });
+
     it('Missing unique property in index definition', function() {
-        return store.setSchema({
+        return store.setSchema(1, {
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -89,7 +118,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid field name in index definition', function() {
-        return store.setSchema({
+        return store.setSchema(1, {
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -109,7 +138,7 @@ describe('SetSchema', function() {
     });
 
     it('Valid parameters don\'t throw', function() {
-        return store.setSchema({
+        return store.setSchema(1, {
             cars: {
                 definition: {
                     color: 'string',
@@ -131,49 +160,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: '851e767df2a7823514cea33734851ee51f8308e3'
-            });
-        });
-    });
-
-    it('Same schema can be set twice', function() {
-        store = new ObjectStore('bar', { db: 15 });
-
-        return store.setSchema({
-            cars: {
-                definition: {
-                    color: 'string',
-                    purchaseDate: 'date',
-                },
-                indices: {
-                    first: {
-                        uniq: true,
-                        fields: [ 'purchaseDate' ]
-                    }
-                }
-            }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: '86e891bf17af68dbf1d91404040ebfd63f6dea9a'
-            });
-
-            return store.setSchema({
-                cars: {
-                    definition: {
-                        color: 'string',
-                        purchaseDate: 'date',
-                    },
-                    indices: {
-                        first: {
-                            uniq: true,
-                            fields: [ 'purchaseDate' ]
-                        }
-                    }
-                }
-            });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: '86e891bf17af68dbf1d91404040ebfd63f6dea9a'
+                val: true
             });
         });
     });
@@ -181,7 +168,7 @@ describe('SetSchema', function() {
     it('Set Schema can\'t be modified', function() {
         store = new ObjectStore('baz', { db: 15 });
 
-        return store.setSchema({
+        return store.setSchema(1, {
             cars: {
                 definition: {
                     color: 'string',
@@ -196,10 +183,10 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: '86e891bf17af68dbf1d91404040ebfd63f6dea9a'
+                val: true
             });
 
-            return store.setSchema({
+            return store.setSchema(1, {
                 cars: {
                     definition: {
                         color: 'string',

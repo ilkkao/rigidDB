@@ -11,12 +11,12 @@ let redisClient = new Redis({
 let store;
 let id;
 
-describe('Find', function() {
+describe('FindAll', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
             store = new ObjectStore('foo', { db: 15 });
 
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -65,7 +65,7 @@ describe('Find', function() {
             color: 'red'
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_INDEX',
+                err: 'unknownIndex',
                 command: 'FINDALL',
                 val: false
             });
@@ -78,7 +78,7 @@ describe('Find', function() {
             purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_INDEX',
+                err: 'wrongIndexType',
                 command: 'FINDALL',
                 val: false
             });

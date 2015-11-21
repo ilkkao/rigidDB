@@ -16,7 +16,7 @@ describe('Exists', function() {
         return redisClient.flushdb().then(function() {
             store = new ObjectStore('foo', { db: 15 });
 
-            store.setSchema({
+            store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -56,7 +56,7 @@ describe('Exists', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 
@@ -68,7 +68,7 @@ describe('Exists', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 });

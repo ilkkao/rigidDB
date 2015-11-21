@@ -16,7 +16,7 @@ describe('List', function() {
         return redisClient.flushdb().then(function() {
             store = new ObjectStore('foo', { db: 15 });
 
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -72,7 +72,7 @@ describe('List', function() {
     it('Get ids for invalid collection', function() {
         return store.list('bikes').then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_COLLECTION',
+                err: 'unknownCollection',
                 command: 'LIST',
                 val: false
             });

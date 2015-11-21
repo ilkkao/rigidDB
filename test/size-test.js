@@ -16,7 +16,7 @@ describe('Size', function() {
         store = new ObjectStore('foo', { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -72,7 +72,7 @@ describe('Size', function() {
     it('Get size for invalid type', function() {
         return store.size('bikes').then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_COLLECTION',
+                err: 'unknownCollection',
                 command: 'SIZE',
                 val: false
             });

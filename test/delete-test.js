@@ -16,7 +16,7 @@ describe('Delete', function() {
         store = new ObjectStore('foo', { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -52,7 +52,7 @@ describe('Delete', function() {
         return store.delete('car', 42).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'DELETE',
-                err: 'E_MISSING',
+                err: 'notFound',
                 val: false
             });
         });
@@ -74,7 +74,7 @@ describe('Delete', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(2);
+            expect(result).to.have.length(3);
         });
     });
 });

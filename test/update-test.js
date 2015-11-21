@@ -16,7 +16,7 @@ describe('Update', function() {
         store = new ObjectStore('foo', { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -54,7 +54,7 @@ describe('Update', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'UPDATE',
-                err: 'E_MISSING',
+                err: 'notFound',
                 val: false,
                 indices: []
             });
@@ -81,7 +81,7 @@ describe('Update', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'UPDATE',
-                err: 'E_INDEX',
+                err: 'notUnique',
                 val: false,
                 indices: [ 'first' ]
             });
@@ -141,7 +141,7 @@ describe('Update', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 });

@@ -15,10 +15,10 @@ describe('Create', function() {
         store = new ObjectStore('foo', { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
-                        color: 'string',
+                        color: { type: 'string', allowNull: true },
                         mileage: 'int',
                         convertible: 'boolean',
                         purchaseDate: 'date'
@@ -41,7 +41,7 @@ describe('Create', function() {
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: '00a9578e079cd369da5a020ddf7bfc036fb3f7e5'
+                val: true
             });
         });
     });
@@ -54,7 +54,7 @@ describe('Create', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'CREATE',
-                err: 'E_COLLECTION',
+                err: 'unknownCollection',
                 val: false
             });
         });
@@ -68,7 +68,7 @@ describe('Create', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'CREATE',
-                err: 'E_PARAMS',
+                err: 'badParameter',
                 val: false
             });
         });
@@ -94,7 +94,7 @@ describe('Create', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'CREATE',
-                err: 'E_INDEX',
+                err: 'notUnique',
                 val: false,
                 indices: [ 'first', 'third' ]
             });
@@ -141,7 +141,7 @@ describe('Create', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(8);
         });
     });
 
@@ -171,7 +171,7 @@ describe('Create', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
               command: 'CREATE',
-              err: 'E_NOSCHEMA',
+              err: 'schemaMissing',
               val: false
             });
         });

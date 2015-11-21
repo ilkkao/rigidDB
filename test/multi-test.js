@@ -15,7 +15,7 @@ describe('Multi', function() {
         store = new ObjectStore('foo', { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema({
+            return store.setSchema(1, {
                 car: {
                     definition: {
                         color: 'string',
@@ -51,7 +51,7 @@ describe('Multi', function() {
             tr.create('car', { color: 'black' });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'E_PARAMS',
+                err: 'badParameter',
                 val: false,
                 command: 'CREATE'
             });
@@ -107,7 +107,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(6);
+            expect(result).to.have.length(7);
         });
     });
 
@@ -127,7 +127,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(2);
+            expect(result).to.have.length(3);
         });
     });
 
@@ -147,7 +147,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(1);
+            expect(result).to.have.length(2);
         });
     });
 
@@ -168,13 +168,13 @@ describe('Multi', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'CREATE',
-                err: 'E_COLLECTION',
+                err: 'unknownCollection',
                 val: false
             });
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(1);
+            expect(result).to.have.length(2);
         });
     });
 
@@ -184,7 +184,7 @@ describe('Multi', function() {
         return store.multi(function() {}).then(function(result) {
             expect(result).to.deep.equal({
                 command: 'MULTI',
-                err: 'E_NOSCHEMA',
+                err: 'schemaMissing',
                 val: false
             });
         });
