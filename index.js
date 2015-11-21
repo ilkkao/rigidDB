@@ -13,6 +13,7 @@ function ObjectStore(prefix, opts) {
 
     this.prefix = prefix;
     this.schemaLoading = true;
+    this.invalidSavedSchema = false;
     this.schema = null;
 
     opts = opts || {};
@@ -24,39 +25,49 @@ function ObjectStore(prefix, opts) {
         db: opts.db || undefined
     });
 
-    this.schemaPromise = this.client.get(`${prefix}:_schema`).then(function(result) {
+    this.schemaPromise = this.client.get(`${prefix}:_schema`).then(result => {
         this.schemaLoading = false;
 
         if (result) {
-            this.schema = JSON.parse(result);
-            return true;
-        }
+            try {
+                this.srcSchema = JSON.parse(result);
+            } catch(e) {
+                this.invalidSavedSchema = true;
+                return;
+            }
 
-        return false;
-    }.bind(this));
+            let normalizedSchema = this._verifySchema(this.srcSchema);
+
+            if (typeof(normalizedSchema) === 'string') {
+                this.invalidSavedSchema = true;
+            } else {
+                this.schema = normalizedSchema;
+            }
+        }
+    });
 }
 
 ObjectStore.prototype.quit = function(schema) {
     return this.client.quit();
 };
 
-ObjectStore.prototype.setSchema = function(schema) {
+ObjectStore.prototype.setSchema = function(revision, schema) {
     if (this.schemaLoading) {
         return this.schemaPromise.then(function() {
-            return this._setSchema(schema);
+            return this._setSchema(revision, schema);
         }.bind(this));
     } else {
-        return this._setSchema(schema);
+        return this._setSchema(revision, schema);
     }
 };
 
-ObjectStore.prototype.getSchemaHash = function() {
+ObjectStore.prototype.getSchema = function() {
     if (this.schemaLoading) {
         return this.schemaPromise.then(function() {
-            return this._getSchemaHash();
+            return this._getSchema();
         }.bind(this));
     } else {
-        return this._getSchemaHash();
+        return this._getSchema();
     }
 };
 
@@ -106,34 +117,37 @@ ObjectStore.prototype.findAll = function(collection, searchAttrs) {
     return this._execSingle(this._findAll, 'FINDALL', collection, searchAttrs);
 };
 
-ObjectStore.prototype._setSchema = function(schema) {
+ObjectStore.prototype._setSchema = function(revision, schema) {
+    let srcSchemaJSON = '';
+
+    if (this.schema) {
+        return Promise.resolve({ val: false, reason: 'Schema already exists', command: 'SETSCHEMA'});
+    }
+
+    try {
+        srcSchemaJSON = JSON.stringify(schema);
+    } catch(e) {
+        return Promise.resolve({ val: false, reason: 'Invalid schema.', command: 'SETSCHEMA' });
+    }
+
     schema = this._verifySchema(schema);
 
     if (typeof(schema) == 'string') {
         return Promise.resolve({ val: false, reason: schema, command: 'SETSCHEMA' });
     }
 
-    let schemaJSON = JSON.stringify(schema);
-    let schemaJSONHash = crypto.createHash('sha1').update(schemaJSON).digest('hex');
-
-    if (this.schema) {
-        let currentSchemaJSON = JSON.stringify(this.schema);
-        let currentSchemaJSONHash = crypto.createHash('sha1').update(currentSchemaJSON).digest('hex');
-
-        if (schemaJSONHash !== currentSchemaJSONHash) {
-            return Promise.resolve({ val: false, reason: 'Schema already exists', command: 'SETSCHEMA'});
-        }
-    }
-
     this.schema = schema;
+    this.srcSchema = JSON.parse(srcSchemaJSON); // Clone
 
-    return this.client.set(`${this.prefix}:_schema`, schemaJSON).then(function() {
-        return { val: schemaJSONHash };
+    return this.client.set(`${this.prefix}:_schema`, srcSchemaJSON).then(() => {
+        return this.client.set(`${this.prefix}:_schemaRevision`, revision);
+    }).then(function() {
+        return { val: true };
     });
 };
 
 ObjectStore.prototype._verifySchema = function(schema) {
-    if (typeof(schema) !== 'object') {
+    if (typeof(schema) !== 'object' || schema === null) {
         return 'Invalid schema.';
     }
 
@@ -144,30 +158,39 @@ ObjectStore.prototype._verifySchema = function(schema) {
     }
 
     for (let collectionName of collections) {
-        let collection = schema[collectionName];
+        let definition = schema[collectionName].definition;
+        let indices =  schema[collectionName].indices || {};
 
-        if (!collection.definition) {
+        if (!definition) {
             return 'Definition missing.';
         }
 
-        let fieldNames = Object.keys(collection.definition);
+        let fieldNames = Object.keys(definition);
 
         for (let fieldName of fieldNames) {
             if (!onlyLettersNumbersDashes(fieldName)) {
                 return `Invalid field name (letters, numbers, and dashes allowed): '${fieldName}'`;
             }
 
-            let type = collection.definition[fieldName];
-
-            if (!/^(string|int|boolean|date|timestamp)$/.test(type)) {
-                return `Invalid type: '${type}'`;
+            if (typeof(definition[fieldName]) === 'string') {
+                definition[fieldName] = { type: definition[fieldName] };
             }
+
+            let type = definition[fieldName];
+
+            if (!type || !type.type) {
+                return `Type definition missing.`;
+            }
+
+            if (!/^(string|int|boolean|date|timestamp)$/.test(type.type)) {
+                return `Invalid type: '${type.type}'`;
+            }
+
+            type.allowMulti = !!type.allowMulti;
         }
 
-        collection.indices = collection.indices || {};
-
-        for (let indexName in collection.indices) {
-            let index = collection.indices[indexName];
+        for (let indexName in indices) {
+            let index = indices[indexName];
 
             if (!(index.uniq === true || index.uniq === false)) {
                 return 'Invalid or missing index unique definition';
@@ -184,27 +207,31 @@ ObjectStore.prototype._verifySchema = function(schema) {
     return schema;
 };
 
-ObjectStore.prototype._getSchemaHash = function() {
+ObjectStore.prototype._getSchema = function() {
+    let ret;
+
     if (!this.schema) {
-        return Promise.resolve({ val: false, err: 'E_NOSCHEMA', command: 'GETSCHEMAHASH'});
+        ret = { val: false, err: 'schemaMissing', command: 'GETSCHEMA'};
     } else {
-        let schemaJSON = JSON.stringify(this.schema);
-        let schemaJSONHash = crypto.createHash('sha1').update(schemaJSON).digest('hex');
-        return Promise.resolve({ val: schemaJSONHash });
+        ret = { val: { revision: 1, schema: this.srcSchema } };
     }
+
+    return Promise.resolve(ret);
 };
 
 ObjectStore.prototype._execMultiNow = function(cb) {
     let ctx = newContext();
 
-    if (!this.schema) {
-        ctx.error = { command: 'MULTI', err: 'E_NOSCHEMA' };
+    if (this.invalidSavedSchema) {
+        ctx.error = { command: 'MULTI', err: 'badSavedSchema' };
+    } else if (!this.schema) {
+        ctx.error = { command: 'MULTI', err: 'schemaMissing' };
     } else {
         const execute = function(op, commandName, args) {
             let collection = args[0];
 
             if (!this.schema[collection]) {
-                ctx.error = { command: commandName, err: 'E_COLLECTION' };
+                ctx.error = { command: commandName, err: 'unknownCollection' };
             }
 
             if (!ctx.error) {
@@ -245,10 +272,14 @@ ObjectStore.prototype._execSingle = function() {
 ObjectStore.prototype._execSingleNow = function(ctx, command, commandName, args) {
     let collection = args[0];
 
-    if (!this.schema) {
-        ctx.error = { command: commandName, err: 'E_NOSCHEMA' };
+ //   console.log(this);
+
+    if (this.invalidSavedSchema) {
+        ctx.error = { command: commandName, err: 'badSavedSchema' };
+    } else if (!this.schema) {
+        ctx.error = { command: commandName, err: 'schemaMissing' };
     } else if (!this.schema[collection]) {
-        ctx.error = { command: commandName, err: 'E_COLLECTION' };
+        ctx.error = { command: commandName, err: 'unknownCollection' };
     }
 
     if (!ctx.error) {
@@ -264,7 +295,7 @@ ObjectStore.prototype._exec = function(ctx) {
         return Promise.resolve({ val: false, err: ctx.error.err, command: ctx.error.command });
     }
 
-    let code = `${utilityFuncs()}\n local ret = { 'none', 'E_NONE' }\n ${ctx.script}\n return ret`;
+    let code = `${utilityFuncs()}\n local ret = { 'none', 'noError' }\n ${ctx.script}\n return ret`;
 
     let sha1 = crypto.createHash('sha1').update(code).digest('hex');
     let evalParams = [ sha1, 0 ].concat(ctx.params);
@@ -278,7 +309,7 @@ ObjectStore.prototype._exec = function(ctx) {
         let err = ret[1];
         let val = ret[2];
 
-        if (err != 'E_NONE') {
+        if (err != 'noError') {
             if (command === 'CREATE' || command == 'UPDATE') {
                 return { val: false, err: err, command: command, indices: val || [] };
             } else {
@@ -316,7 +347,7 @@ ObjectStore.prototype._create = function(ctx, collection, attrs) {
 
     if (Object.keys(this.schema[collection].definition).sort().join(':') !==
         Object.keys(redisAttrs).sort().join(':')) {
-        ctx.error = { command: 'CREATE', err: 'E_PARAMS' };
+        ctx.error = { command: 'CREATE', err: 'badParameter' };
         return;
     }
 
@@ -329,7 +360,7 @@ ObjectStore.prototype._create = function(ctx, collection, attrs) {
     genCode(ctx, `hmset(key, values)`);
     genCode(ctx, `redis.call('ZADD', '${this.prefix}:${collection}:ids', id, id)`);
 
-    genCode(ctx, `ret = { 'CREATE', 'E_NONE', id }`);
+    genCode(ctx, `ret = { 'CREATE', 'noError', id }`);
 };
 
 ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
@@ -339,7 +370,7 @@ ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
     pushParams(ctx, id);
 
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'UPDATE', 'E_MISSING' } end`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'UPDATE', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
     for (let prop in redisAttrs) {
@@ -360,49 +391,49 @@ ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
     this._addIndices(ctx, collection, 'UPDATE');
 
     genCode(ctx, `hmset(key, values)`);
-    genCode(ctx, `ret = { 'UPDATE', 'E_NONE', true }`);
+    genCode(ctx, `ret = { 'UPDATE', 'noError', true }`);
 };
 
 ObjectStore.prototype._delete = function(ctx, collection, id) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'DELETE', 'E_MISSING' } end`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'DELETE', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
     this._removeIndices(ctx, collection, 'DELETE');
 
     genCode(ctx, `redis.call('ZREM', '${this.prefix}:${collection}:ids', id)`);
     genCode(ctx, `redis.call('DEL', key)`);
-    genCode(ctx, `ret = { 'DELETE', 'E_NONE' }`);
+    genCode(ctx, `ret = { 'DELETE', 'noError' }`);
 
     pushParams(ctx, id);
 };
 
 ObjectStore.prototype._get = function(ctx, collection, id) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'GET', 'E_MISSING' } end`);
-    genCode(ctx, `ret = { 'GET', 'E_NONE', redis.call('HGETALL', key), '${collection}' }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'GET', 'notFound' } end`);
+    genCode(ctx, `ret = { 'GET', 'noError', redis.call('HGETALL', key), '${collection}' }`);
 
     pushParams(ctx, id);
 };
 
 ObjectStore.prototype._exists = function(ctx, collection, id) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'E_NONE', 0 } end`);
-    genCode(ctx, `ret = { 'EXISTS', 'E_NONE', 1 }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'noError', 0 } end`);
+    genCode(ctx, `ret = { 'EXISTS', 'noError', 1 }`);
 
     pushParams(ctx, id);
 };
 
 ObjectStore.prototype._size = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'E_NONE', 0 } end`);
-    genCode(ctx, `ret = { 'SIZE', 'E_NONE', redis.call('ZCARD', key) }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'noError', 0 } end`);
+    genCode(ctx, `ret = { 'SIZE', 'noError', redis.call('ZCARD', key) }`);
 };
 
 ObjectStore.prototype._list = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
-    genCode(ctx, `ret = { 'LIST', 'E_NONE', redis.call("ZRANGE", key, 0, -1) }`);
+    genCode(ctx, `ret = { 'LIST', 'noError', redis.call("ZRANGE", key, 0, -1) }`);
 };
 
 ObjectStore.prototype._find = function(ctx, collection, attrs) {
@@ -417,18 +448,24 @@ ObjectStore.prototype._findCommon = function(ctx, collection, attrs, uniqIndex, 
     let indices = this.schema[collection].indices;
     let searchFields = Object.keys(attrs).sort().join();
     let indexFound = false;
+    let wrongIndexType = false;
 
     for (let indexName in indices) {
         let index = indices[indexName];
 
-        if (index.fields.sort().join() === searchFields && index.uniq === uniqIndex) {
-            indexFound = true;
+        if (index.fields.sort().join() === searchFields) {
+            if (index.uniq === uniqIndex) {
+                indexFound = true;
+            } else {
+                wrongIndexType = true;
+            }
+
             break;
         }
     }
 
     if (!indexFound) {
-        ctx.error = { command: command, err: 'E_INDEX' };
+        ctx.error = { command: command, err: wrongIndexType ? 'wrongIndexType' : 'unknownIndex' };
         return;
     }
 
@@ -442,7 +479,7 @@ ObjectStore.prototype._findCommon = function(ctx, collection, attrs, uniqIndex, 
     let redisCommand = uniqIndex ? 'HGET' : 'SMEMBERS';
     let redisParams =  uniqIndex ? `'${name}', ${prop}` : `'${name}:' .. ${prop}`
 
-    genCode(ctx, `ret = { '${command}', 'E_NONE', redis.call('${redisCommand}', ${redisParams}) }`);
+    genCode(ctx, `ret = { '${command}', 'noError', redis.call('${redisCommand}', ${redisParams}) }`);
 };
 
 ObjectStore.prototype._genAllIndices = function(ctx, collection) {
@@ -490,7 +527,7 @@ ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, command
     }
 
     genCode(ctx, `if uniqError then`);
-    genCode(ctx, `return { '${command}', 'E_INDEX', nonUniqIndices }`);
+    genCode(ctx, `return { '${command}', 'notUnique', nonUniqIndices }`);
     genCode(ctx, `end`);
 
     return indices;
@@ -539,7 +576,7 @@ ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
         let propVal = attrs[prop];
         let redisVal;
 
-        switch (propType) {
+        switch (propType.type) {
             case 'boolean':
                 redisVal = propVal ? 'true' : 'false';
                 break;
@@ -571,7 +608,7 @@ ObjectStore.prototype._denormalizeAttrs = function(collection, redisRetVal) {
         let val = redisRetVal.shift();
         let propType = this.schema[collection].definition[prop];
 
-        switch (propType) {
+        switch (propType.type) {
             case 'boolean':
                 val = val === 'true';
                 break;
