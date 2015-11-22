@@ -21,7 +21,7 @@ describe('Find', function() {
             store.setSchema(1, {
                 car: {
                     definition: {
-                        color: 'string',
+                        color: { type: 'string', allowNull: false },
                         mileage: 'int',
                         convertible: 'boolean',
                         purchaseDate: 'date'
@@ -99,6 +99,19 @@ describe('Find', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: 1
+            });
+        });
+    });
+
+    it('Fails if null when null is not allowed', function() {
+        return store.find('car', {
+            color: null,
+            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'FIND',
+                err: 'nullNotAllowed',
+                val: false
             });
         });
     });

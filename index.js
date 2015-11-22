@@ -345,15 +345,20 @@ ObjectStore.prototype._exec = function(ctx) {
 ObjectStore.prototype._create = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
+    if (redisAttrs.err) {
+        ctx.error = { command: 'CREATE', err: redisAttrs.err };
+        return;
+    }
+
     if (Object.keys(this.schema[collection].definition).sort().join(':') !==
-        Object.keys(redisAttrs).sort().join(':')) {
+        Object.keys(redisAttrs.val).sort().join(':')) {
         ctx.error = { command: 'CREATE', err: 'badParameter' };
         return;
     }
 
     genCode(ctx, `local id = redis.call('INCR', '${this.prefix}:${collection}:nextid')`);
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
-    this._addValuesVar(ctx, redisAttrs);
+    this._addValuesVar(ctx, redisAttrs.val);
 
     this._addIndices(ctx, collection, 'CREATE');
 
@@ -366,6 +371,11 @@ ObjectStore.prototype._create = function(ctx, collection, attrs) {
 ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
+    if (redisAttrs.err) {
+        ctx.error = { command: 'UPDATE', err: redisAttrs.err };
+        return;
+    }
+
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     pushParams(ctx, id);
 
@@ -373,9 +383,9 @@ ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'UPDATE', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
-    for (let prop in redisAttrs) {
+    for (let prop in redisAttrs.val) {
         genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
-        pushParams(ctx, redisAttrs[prop]);
+        pushParams(ctx, redisAttrs.val[prop]);
     }
 
     this._assertUniqIndicesFree(ctx, collection, 'UPDATE');
@@ -383,9 +393,9 @@ ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
     genCode(ctx, `values = hgetall(key)`);
     this._removeIndices(ctx, collection, 'UPDATE');
 
-    for (let prop in redisAttrs) {
+    for (let prop in redisAttrs.val) {
         genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
-        pushParams(ctx, redisAttrs[prop]);
+        pushParams(ctx, redisAttrs.val[prop]);
     }
 
     this._addIndices(ctx, collection, 'UPDATE');
@@ -471,9 +481,14 @@ ObjectStore.prototype._findCommon = function(ctx, collection, attrs, uniqIndex, 
 
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
-    this._addValuesVar(ctx, redisAttrs);
+    if (redisAttrs.err) {
+        ctx.error = { command: command, err: redisAttrs.err };
+        return;
+    }
 
-    let fields = Object.keys(redisAttrs);
+    this._addValuesVar(ctx, redisAttrs.val);
+
+    let fields = Object.keys(redisAttrs.val);
     let name = this._indexName(collection, fields);
     let prop = this._indexValues(fields);
     let redisCommand = uniqIndex ? 'HGET' : 'SMEMBERS';
@@ -570,11 +585,18 @@ ObjectStore.prototype._addValuesVar = function(ctx, attrs) {
 
 ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
     let redisAttrs = {};
+    let definition = this.schema[collection].definition;
 
     for (let prop in attrs) {
-        let propType = this.schema[collection].definition[prop];
+        let propType = definition[prop];
         let propVal = attrs[prop];
         let redisVal;
+
+        if (propVal === null) {
+            if (!propType.allowNull) {
+                return { err: `nullNotAllowed` };
+            }
+        }
 
         switch (propType.type) {
             case 'boolean':
@@ -597,7 +619,7 @@ ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
         redisAttrs[prop] = redisVal;
     }
 
-    return redisAttrs;
+    return { val: redisAttrs };
 };
 
 ObjectStore.prototype._denormalizeAttrs = function(collection, redisRetVal) {

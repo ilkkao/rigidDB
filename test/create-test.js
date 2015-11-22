@@ -19,7 +19,7 @@ describe('Create', function() {
                 car: {
                     definition: {
                         color: { type: 'string', allowNull: true },
-                        mileage: 'int',
+                        mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
@@ -123,7 +123,7 @@ describe('Create', function() {
 
             return redisClient.zrange('foo:car:ids', 0, -1);
         }).then(function(result) {
-            expect(result).to.deep.equal([ "1" ]);
+            expect(result).to.deep.equal([ '1' ]);
 
             return redisClient.get('foo:car:nextid');
         }).then(function(result) {
@@ -177,4 +177,18 @@ describe('Create', function() {
         });
     });
 
+    it('Fails if the value is null', function() {
+        return store.create('car', {
+            color: 'blue',
+            mileage: null,
+            convertible: true,
+            purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'CREATE',
+                err: 'nullNotAllowed',
+                val: false
+            });
+        });
+    });
 });

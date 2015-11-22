@@ -20,7 +20,7 @@ describe('Update', function() {
                 car: {
                     definition: {
                         color: 'string',
-                        mileage: 'int',
+                        mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
@@ -142,6 +142,21 @@ describe('Update', function() {
             return redisClient.keys('*');
         }).then(function(result) {
             expect(result).to.have.length(7);
+        });
+    });
+
+    it('Fails if null attribute is not allowed', function() {
+        return store.update('car', id, {
+            color: 'red',
+            mileage: null,
+            convertible: false,
+            purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'UPDATE',
+                err: 'nullNotAllowed',
+                val: false
+            });
         });
     });
 });
