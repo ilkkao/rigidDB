@@ -596,24 +596,29 @@ ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
             if (!propType.allowNull) {
                 return { err: `nullNotAllowed` };
             }
-        }
 
-        switch (propType.type) {
-            case 'boolean':
-                redisVal = propVal ? 'true' : 'false';
-                break;
-            case 'int':
-                redisVal = parseInt(propVal).toString();
-                break;
-            case 'string':
-                redisVal = String(propVal);
-                break;
-            case 'date':
-                redisVal = propVal.toString();
-                break;
-            case 'timestamp':
-                redisVal = propVal.getTime().toString();
-                break;
+            redisVal = '~';
+        } else {
+            switch (propType.type) {
+                case 'boolean':
+                    redisVal = propVal ? 'true' : 'false';
+                    break;
+                case 'int':
+                    redisVal = parseInt(propVal).toString();
+                    break;
+                case 'string':
+                    redisVal = String(propVal);
+                    if (/^~+$/.test(redisVal)) {
+                        redisVal = `~${redisVal}`;
+                    }
+                    break;
+                case 'date':
+                    redisVal = propVal.toString();
+                    break;
+                case 'timestamp':
+                    redisVal = propVal.getTime().toString();
+                    break;
+            }
         }
 
         redisAttrs[prop] = redisVal;
@@ -627,25 +632,34 @@ ObjectStore.prototype._denormalizeAttrs = function(collection, redisRetVal) {
 
     while (redisRetVal.length > 0) {
         let prop = redisRetVal.shift();
-        let val = redisRetVal.shift();
+        let redisVal = redisRetVal.shift();
         let propType = this.schema[collection].definition[prop];
 
-        switch (propType.type) {
-            case 'boolean':
-                val = val === 'true';
-                break;
-            case 'int':
-                val = parseInt(val);
-                break;
-            case 'date':
-                val = new Date(val);
-                break;
-            case 'timestamp':
-                val = new Date(parseInt(val));
-                break;
-        }
+        if (redisVal === '~') {
+            ret[prop] = null;
+        } else {
+            switch (propType.type) {
+                case 'boolean':
+                    redisVal = redisVal === 'true';
+                    break;
+                case 'int':
+                    redisVal = parseInt(redisVal);
+                    break;
+                case 'string':
+                    if (/^~+$/.test(redisVal)) {
+                        redisVal = redisVal.substring(1);
+                    }
+                    break;
+                case 'date':
+                    redisVal = new Date(redisVal);
+                    break;
+                case 'timestamp':
+                    redisVal = new Date(parseInt(redisVal));
+                    break;
+            }
 
-        ret[prop] = val;
+            ret[prop] = redisVal;
+        }
     }
 
     return ret;
