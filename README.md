@@ -63,7 +63,7 @@ store.setSchema({
 
 ### setSchema(schemaDefinition)
 
-### getSchemaHash()
+### getSchema()
 
 ### create(collection, attributes)
 
@@ -82,8 +82,6 @@ store.setSchema({
 ### multi(transaction)
 
 ### find(collection, searchAttributes)
-
-### findAll(collection, searchAttributes)
 
 ### quit()
 
