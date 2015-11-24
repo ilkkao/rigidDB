@@ -52,23 +52,11 @@ ObjectStore.prototype.quit = function() {
 };
 
 ObjectStore.prototype.setSchema = function(revision, schema) {
-    if (this.schemaLoading) {
-        return this.schemaPromise.then(function() {
-            return this._setSchema(revision, schema);
-        }.bind(this));
-    } else {
-        return this._setSchema(revision, schema);
-    }
+    return this._whenSchemaLoaded(() => this._setSchema(revision, schema));
 };
 
 ObjectStore.prototype.getSchema = function() {
-    if (this.schemaLoading) {
-        return this.schemaPromise.then(function() {
-            return this._getSchema();
-        }.bind(this));
-    } else {
-        return this._getSchema();
-    }
+    return this._whenSchemaLoaded(() => this._getSchema());
 };
 
 ObjectStore.prototype.create = function(collection, attrs) {
@@ -100,13 +88,7 @@ ObjectStore.prototype.size = function(collection) {
 };
 
 ObjectStore.prototype.multi = function(cb) {
-    if (this.schemaLoading) {
-        return this.schemaPromise.then(function() {
-            return this._execMultiNow(cb);
-        }.bind(this));
-    } else {
-        return this._execMultiNow(cb);
-    }
+    return this._whenSchemaLoaded(() => this._execMultiNow(cb));
 };
 
 ObjectStore.prototype.find = function(collection, searchAttrs) {
@@ -260,13 +242,7 @@ ObjectStore.prototype._execSingle = function() {
 
     let ctx = newContext();
 
-    if (this.schemaLoading) {
-        return this.schemaPromise.then(function() {
-            return this._execSingleNow(ctx, command, commandName, args);
-        }.bind(this));
-    } else {
-        return this._execSingleNow(ctx, command, commandName, args);
-    }
+    return this._whenSchemaLoaded(() => this._execSingleNow(ctx, command, commandName, args));
 };
 
 ObjectStore.prototype._execSingleNow = function(ctx, command, commandName, args) {
@@ -340,6 +316,10 @@ ObjectStore.prototype._exec = function(ctx) {
             return that.client.evalsha.apply(that.client, evalParams).then(decodeResult);
         });
     }
+};
+
+ObjectStore.prototype._whenSchemaLoaded = function(cb) {
+    return this.schemaLoading ? this.schemaPromise.then(cb) : cb();
 };
 
 ObjectStore.prototype._create = function(ctx, collection, attrs) {
