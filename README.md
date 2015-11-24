@@ -45,14 +45,14 @@ store.setSchema({
         purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
     })
 }).then(function(id) {
-    return store.find('cars', id);
-}).then(function(object) {
-    // object = {
-    //     color: 'blue',
-    //     mileage: 12345,
-    //     convertible: true,
-    //     purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
-    // }
+    // id = 1
+
+    return store.find('cars', {
+        color: 'blue',
+        mileage: 12345
+    });
+}).then(function(results) {
+    // results = [ 1 ]
 });
 ```
 
