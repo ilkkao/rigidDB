@@ -2,7 +2,7 @@
 
 const expect = require('chai').expect,
       Redis = require('ioredis'),
-      ObjectStore = require('../index');
+      RigidDB = require('../index');
 
 let redisClient = new Redis({
     db: 15
@@ -14,7 +14,7 @@ let id;
 describe('List', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new ObjectStore('foo', { db: 15 });
+            store = new RigidDB('foo', { db: 15 });
 
             return store.setSchema(1, {
                 car: {

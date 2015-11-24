@@ -2,7 +2,7 @@
 
 const expect = require('chai').expect,
       Redis = require('ioredis'),
-      ObjectStore = require('../index');
+      RigidDB = require('../index');
 
 let redisClient = new Redis({
     db: 15
@@ -11,13 +11,13 @@ let redisClient = new Redis({
 describe('Constructor', function() {
     it('Missing prefix parameter throws', function() {
         expect(function() {
-            new ObjectStore();
+            new RigidDB();
         }).to.throw('Invalid prefix.');
     });
 
     it('Invalid prefix parameter throws', function() {
         expect(function() {
-            new ObjectStore('!notvalid');
+            new RigidDB('!notvalid');
         }).to.throw('Invalid prefix.');
     });
 
@@ -25,7 +25,7 @@ describe('Constructor', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo:_schema', 'whatwhat');
         }).then(function(result) {
-            let store = new ObjectStore('foo', {
+            let store = new RigidDB('foo', {
                 db: 15
             });
 
@@ -43,7 +43,7 @@ describe('Constructor', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo:_schema', '{ "cars": {} }');
         }).then(function(result) {
-            let store = new ObjectStore('foo', {
+            let store = new RigidDB('foo', {
                 db: 15
             });
 
@@ -61,7 +61,7 @@ describe('Constructor', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo:_schema', '{ "cars": {} }');
         }).then(function(result) {
-            let store = new ObjectStore('foo', {
+            let store = new RigidDB('foo', {
                 db: 15
             });
 

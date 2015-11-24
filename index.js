@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 let cachedScripts = {};
 
-function ObjectStore(prefix, redisOpts) {
+function RigidDB(prefix, redisOpts) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
     }
@@ -47,55 +47,55 @@ function ObjectStore(prefix, redisOpts) {
     });
 }
 
-ObjectStore.prototype.quit = function() {
+RigidDB.prototype.quit = function() {
     return this.client.quit();
 };
 
-ObjectStore.prototype.setSchema = function(revision, schema) {
+RigidDB.prototype.setSchema = function(revision, schema) {
     return this._whenSchemaLoaded(() => this._setSchema(revision, schema));
 };
 
-ObjectStore.prototype.getSchema = function() {
+RigidDB.prototype.getSchema = function() {
     return this._whenSchemaLoaded(() => this._getSchema());
 };
 
-ObjectStore.prototype.create = function(collection, attrs) {
+RigidDB.prototype.create = function(collection, attrs) {
     return this._execSingle(this._create, 'CREATE', collection, attrs);
 };
 
-ObjectStore.prototype.update = function(collection, id, attrs) {
+RigidDB.prototype.update = function(collection, id, attrs) {
     return this._execSingle(this._update, 'UPDATE', collection, id, attrs);
 };
 
-ObjectStore.prototype.delete = function(collection, id) {
+RigidDB.prototype.delete = function(collection, id) {
     return this._execSingle(this._delete, 'DELETE', collection, id);
 };
 
-ObjectStore.prototype.get = function(collection, id) {
+RigidDB.prototype.get = function(collection, id) {
     return this._execSingle(this._get, 'GET', collection, id);
 };
 
-ObjectStore.prototype.exists = function(collection, id) {
+RigidDB.prototype.exists = function(collection, id) {
     return this._execSingle(this._exists, 'EXISTS', collection, id);
 };
 
-ObjectStore.prototype.list = function(collection) {
+RigidDB.prototype.list = function(collection) {
     return this._execSingle(this._list, 'LIST', collection);
 };
 
-ObjectStore.prototype.size = function(collection) {
+RigidDB.prototype.size = function(collection) {
     return this._execSingle(this._size, 'SIZE', collection);
 };
 
-ObjectStore.prototype.multi = function(cb) {
+RigidDB.prototype.multi = function(cb) {
     return this._whenSchemaLoaded(() => this._execMultiNow(cb));
 };
 
-ObjectStore.prototype.find = function(collection, searchAttrs) {
+RigidDB.prototype.find = function(collection, searchAttrs) {
     return this._execSingle(this._find, 'FIND', collection, searchAttrs);
 };
 
-ObjectStore.prototype._setSchema = function(revision, schema) {
+RigidDB.prototype._setSchema = function(revision, schema) {
     let srcSchemaJSON = '';
 
     if (this.schema) {
@@ -122,7 +122,7 @@ ObjectStore.prototype._setSchema = function(revision, schema) {
         .then(() => ({ val: true }));
 };
 
-ObjectStore.prototype._verifySchema = function(schema) {
+RigidDB.prototype._verifySchema = function(schema) {
     if (typeof(schema) !== 'object' || schema === null) {
         return 'Invalid schema.';
     }
@@ -187,7 +187,7 @@ ObjectStore.prototype._verifySchema = function(schema) {
     return schema;
 };
 
-ObjectStore.prototype._getSchema = function() {
+RigidDB.prototype._getSchema = function() {
     let ret;
 
     if (!this.schema) {
@@ -199,7 +199,7 @@ ObjectStore.prototype._getSchema = function() {
     return Promise.resolve(ret);
 };
 
-ObjectStore.prototype._execMultiNow = function(cb) {
+RigidDB.prototype._execMultiNow = function(cb) {
     let ctx = newContext();
 
     if (this.invalidSavedSchema) {
@@ -233,7 +233,7 @@ ObjectStore.prototype._execMultiNow = function(cb) {
     return this._exec(ctx);
 };
 
-ObjectStore.prototype._execSingle = function() {
+RigidDB.prototype._execSingle = function() {
     let args = Array.prototype.slice.call(arguments);
     let command = args.shift();
     let commandName = args.shift();
@@ -243,7 +243,7 @@ ObjectStore.prototype._execSingle = function() {
     return this._whenSchemaLoaded(() => this._execSingleNow(ctx, command, commandName, args));
 };
 
-ObjectStore.prototype._execSingleNow = function(ctx, command, commandName, args) {
+RigidDB.prototype._execSingleNow = function(ctx, command, commandName, args) {
     let collection = args[0];
 
  //   console.log(this);
@@ -264,7 +264,7 @@ ObjectStore.prototype._execSingleNow = function(ctx, command, commandName, args)
     return this._exec(ctx);
 };
 
-ObjectStore.prototype._exec = function(ctx) {
+RigidDB.prototype._exec = function(ctx) {
     if (ctx.error) {
         return Promise.resolve({ val: false, err: ctx.error.err, command: ctx.error.command });
     }
@@ -314,11 +314,11 @@ ObjectStore.prototype._exec = function(ctx) {
     }
 };
 
-ObjectStore.prototype._whenSchemaLoaded = function(cb) {
+RigidDB.prototype._whenSchemaLoaded = function(cb) {
     return this.schemaLoading ? this.schemaPromise.then(cb) : cb();
 };
 
-ObjectStore.prototype._create = function(ctx, collection, attrs) {
+RigidDB.prototype._create = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
@@ -344,7 +344,7 @@ ObjectStore.prototype._create = function(ctx, collection, attrs) {
     genCode(ctx, `ret = { 'CREATE', 'noError', id }`);
 };
 
-ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
+RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
@@ -381,7 +381,7 @@ ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
     genCode(ctx, `ret = { 'UPDATE', 'noError', true }`);
 };
 
-ObjectStore.prototype._delete = function(ctx, collection, id) {
+RigidDB.prototype._delete = function(ctx, collection, id) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'DELETE', 'notFound' } end`);
@@ -396,7 +396,7 @@ ObjectStore.prototype._delete = function(ctx, collection, id) {
     pushParams(ctx, id);
 };
 
-ObjectStore.prototype._get = function(ctx, collection, id) {
+RigidDB.prototype._get = function(ctx, collection, id) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'GET', 'notFound' } end`);
     genCode(ctx, `ret = { 'GET', 'noError', redis.call('HGETALL', key), '${collection}' }`);
@@ -404,7 +404,7 @@ ObjectStore.prototype._get = function(ctx, collection, id) {
     pushParams(ctx, id);
 };
 
-ObjectStore.prototype._exists = function(ctx, collection, id) {
+RigidDB.prototype._exists = function(ctx, collection, id) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'noError', 0 } end`);
     genCode(ctx, `ret = { 'EXISTS', 'noError', 1 }`);
@@ -412,18 +412,18 @@ ObjectStore.prototype._exists = function(ctx, collection, id) {
     pushParams(ctx, id);
 };
 
-ObjectStore.prototype._size = function(ctx, collection) {
+RigidDB.prototype._size = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'noError', 0 } end`);
     genCode(ctx, `ret = { 'SIZE', 'noError', redis.call('ZCARD', key) }`);
 };
 
-ObjectStore.prototype._list = function(ctx, collection) {
+RigidDB.prototype._list = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
     genCode(ctx, `ret = { 'LIST', 'noError', redis.call("ZRANGE", key, 0, -1) }`);
 };
 
-ObjectStore.prototype._find = function(ctx, collection, attrs) {
+RigidDB.prototype._find = function(ctx, collection, attrs) {
     let indices = this.schema[collection].indices;
     let searchFields = Object.keys(attrs).sort().join();
     let indexFound = false;
@@ -464,7 +464,7 @@ ObjectStore.prototype._find = function(ctx, collection, attrs) {
     genCode(ctx, `ret = { 'FIND', 'noError', result }`);
 };
 
-ObjectStore.prototype._genAllIndices = function(ctx, collection) {
+RigidDB.prototype._genAllIndices = function(ctx, collection) {
     let indices = this.schema[collection].indices;
     let redisIndices = [];
 
@@ -485,16 +485,16 @@ ObjectStore.prototype._genAllIndices = function(ctx, collection) {
     return redisIndices;
 };
 
-ObjectStore.prototype._indexName = function(collection, fields) {
+RigidDB.prototype._indexName = function(collection, fields) {
     return `${this.prefix}:${collection}:i:${fields.sort().join(':')}`;
 };
 
-ObjectStore.prototype._indexValues = function(fields) {
+RigidDB.prototype._indexValues = function(fields) {
     // Lua gsub returns two values. Extra parenthesis are used to discard the second value.
     return fields.sort().map(field => `(string.gsub(values["${field}"], ':', '::'))`).join(`..':'..`);
 };
 
-ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, indices, command) {
+RigidDB.prototype._assertUniqIndicesFree = function(ctx, collection, indices, command) {
     genCode(ctx, `local nonUniqIndices, uniqError = {}, false`);
 
     for (let index of indices) {
@@ -516,7 +516,7 @@ ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, indices
     return indices;
 };
 
-ObjectStore.prototype._addIndices = function(ctx, collection, command) {
+RigidDB.prototype._addIndices = function(ctx, collection, command) {
     let indices = this._genAllIndices(ctx, collection);
     this._assertUniqIndicesFree(ctx, collection, indices, command);
 
@@ -534,7 +534,7 @@ ObjectStore.prototype._addIndices = function(ctx, collection, command) {
     }
 };
 
-ObjectStore.prototype._removeIndices = function(ctx, collection) {
+RigidDB.prototype._removeIndices = function(ctx, collection) {
     let indices = this._genAllIndices(ctx, collection);
 
     for (let index of indices) {
@@ -551,7 +551,7 @@ ObjectStore.prototype._removeIndices = function(ctx, collection) {
     }
 };
 
-ObjectStore.prototype._addValuesVar = function(ctx, attrs) {
+RigidDB.prototype._addValuesVar = function(ctx, attrs) {
     genCode(ctx, `local values = {`);
 
     for (let prop in attrs) {
@@ -562,7 +562,7 @@ ObjectStore.prototype._addValuesVar = function(ctx, attrs) {
     genCode(ctx, `}`);
 };
 
-ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
+RigidDB.prototype._normalizeAttrs = function(collection, attrs) {
     let redisAttrs = {};
     let definition = this.schema[collection].definition;
 
@@ -606,7 +606,7 @@ ObjectStore.prototype._normalizeAttrs = function(collection, attrs) {
     return { val: redisAttrs };
 };
 
-ObjectStore.prototype._denormalizeAttrs = function(collection, redisRetVal) {
+RigidDB.prototype._denormalizeAttrs = function(collection, redisRetVal) {
     let ret = {};
 
     while (redisRetVal.length > 0) {
@@ -705,4 +705,4 @@ function utilityFuncs() {
     `;
 }
 
-module.exports = ObjectStore;
+module.exports = RigidDB;

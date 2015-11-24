@@ -1,23 +1,24 @@
-# Redis ObjectDB
+# RigidDB
 
-A promise based node module for saving searchable plain JavaScript objects to Redis. All API methods are executed as atomic Lua transactions to avoid data corruption.
+A promise based node module for saving searchable plain JavaScript objects to Redis. API methods are executed as atomic Lua transactions to avoid data corruption. Inserted data
+is type checked against a predefined schema.
 
 ## Installation
 
-`npm install --save redis-objectdb`
+`npm install --save rigiddb`
 
 ## Status:
 
-[![Build Status](https://secure.travis-ci.org/ilkkao/redis-objectdb.png)](http://travis-ci.org/ilkkao/redis-objectdb)
+[![Build Status](https://secure.travis-ci.org/ilkkao/rigidDB.png)](http://travis-ci.org/ilkkao/rigidDB)
 
-[![Coverage Status](https://coveralls.io/repos/ilkkao/redis-objectdb/badge.svg?branch=master&service=github)](https://coveralls.io/github/ilkkao/redis-objectdb?branch=master)
+[![Coverage Status](https://coveralls.io/repos/ilkkao/rigidDB/badge.svg?branch=master&service=github)](https://coveralls.io/github/ilkkao/rigidDB?branch=master)
 
 ## Example
 
 ```javascript
-const RedisObjectDB = require('redis-objectdb');
+const RigidDB = require('rigiddb');
 
-let store = new RedisObjectDB('mydb');
+let store = new RigidDB('mydb');
 
 store.setSchema({
     cars: {
@@ -59,7 +60,7 @@ store.setSchema({
 
 ## API
 
-### new RedisObjectDB(options, redisOptions)
+### new RigidDB(options, redisOptions)
 
 ### setSchema(schemaDefinition)
 

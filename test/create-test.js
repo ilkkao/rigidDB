@@ -2,7 +2,7 @@
 
 const expect = require('chai').expect,
       Redis = require('ioredis'),
-      ObjectStore = require('../index');
+      RigidDB = require('../index');
 
 let redisClient = new Redis({
     db: 15
@@ -12,7 +12,7 @@ let store;
 
 describe('Create', function() {
     beforeEach(function() {
-        store = new ObjectStore('foo', { db: 15 });
+        store = new RigidDB('foo', { db: 15 });
 
         return redisClient.flushdb().then(function() {
             return store.setSchema(1, {
@@ -146,7 +146,7 @@ describe('Create', function() {
     });
 
     it('Redis is updated correctly when indices change from hash to set', function() {
-        store = new ObjectStore('bar', { db: 15 });
+        store = new RigidDB('bar', { db: 15 });
 
         return store.setSchema(1, {
             car: {
@@ -238,7 +238,7 @@ describe('Create', function() {
     });
 
     it('Succeeds if the schema is set earlier', function() {
-        let secondStore = new ObjectStore('foo', { db: 15 });
+        let secondStore = new RigidDB('foo', { db: 15 });
 
         return secondStore.create('car', {
             color: 'white',
@@ -253,7 +253,7 @@ describe('Create', function() {
     });
 
     it('Fails if the schema is not set', function() {
-        let secondStore = new ObjectStore('baz', { db: 15 });
+        let secondStore = new RigidDB('baz', { db: 15 });
 
         return secondStore.create('car', {
             color: 'white',

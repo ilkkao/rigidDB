@@ -2,17 +2,17 @@
 
 const expect = require('chai').expect,
       Redis = require('ioredis'),
-      ObjectStore = require('../index');
+      RigidDB = require('../index');
 
 let redisClient = new Redis({
     db: 15
 });
 
-let store = new ObjectStore('foo', { db: 15 });
+let store = new RigidDB('foo', { db: 15 });
 
 describe('GetSchema', function() {
     beforeEach(function() {
-        store = new ObjectStore('foo', { db: 15 });
+        store = new RigidDB('foo', { db: 15 });
 
         return redisClient.flushdb();
     });

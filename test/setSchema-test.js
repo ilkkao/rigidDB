@@ -2,9 +2,9 @@
 
 const expect = require('chai').expect,
       Redis = require('ioredis'),
-      ObjectStore = require('../index');
+      RigidDB = require('../index');
 
-let store = new ObjectStore('foo', { db: 15 });
+let store = new RigidDB('foo', { db: 15 });
 
 describe('SetSchema', function() {
     it('Missing schema parameter', function() {
@@ -206,7 +206,7 @@ describe('SetSchema', function() {
     });
 
     it('Set Schema can\'t be modified', function() {
-        store = new ObjectStore('baz', { db: 15 });
+        store = new RigidDB('baz', { db: 15 });
 
         return store.setSchema(1, {
             cars: {

@@ -1,7 +1,7 @@
 {
-  "name": "redis-objectdb",
-  "version": "0.2.0",
-  "description": "Object store with an index",
+  "name": "rigiddb",
+  "version": "0.3.0",
+  "description": "Object store with an index and strict schema",
   "main": "index.js",
   "scripts": {
     "test": "istanbul cover _mocha",
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ilkkao/object-store.git"
+    "url": "git+https://github.com/ilkkao/rigidDB.git"
   },
   "keywords": [
     "object",
@@ -19,9 +19,9 @@
   "author": "Ilkka Oksanen <iao@iki.fi> (http://iao.fi)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/ilkkao/object-store/issues"
+    "url": "https://github.com/ilkkao/rigidDB/issues"
   },
-  "homepage": "https://github.com/ilkkao/object-store#readme",
+  "homepage": "https://github.com/ilkkao/rigidDB#readme",
   "devDependencies": {
     "chai": "^3.4.0",
     "coveralls": "^2.11.4",
