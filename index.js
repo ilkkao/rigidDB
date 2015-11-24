@@ -117,11 +117,9 @@ ObjectStore.prototype._setSchema = function(revision, schema) {
     this.schema = schema;
     this.srcSchema = JSON.parse(srcSchemaJSON); // Clone
 
-    return this.client.set(`${this.prefix}:_schema`, srcSchemaJSON).then(() => {
-        return this.client.set(`${this.prefix}:_schemaRevision`, revision);
-    }).then(function() {
-        return { val: true };
-    });
+    return this.client.set(`${this.prefix}:_schema`, srcSchemaJSON)
+        .then(() => this.client.set(`${this.prefix}:_schemaRevision`, revision))
+        .then(() => ({ val: true }));
 };
 
 ObjectStore.prototype._verifySchema = function(schema) {
@@ -309,7 +307,7 @@ ObjectStore.prototype._exec = function(ctx) {
     if (cachedScripts[sha1]) {
         return this.client.evalsha.apply(this.client, evalParams).then(decodeResult);
     } else {
-        return this.client.script('load', code).then(function() {
+        return this.client.script('load', code).then(() => {
             cachedScripts[sha1] = true;
             return that.client.evalsha.apply(that.client, evalParams).then(decodeResult);
         });
