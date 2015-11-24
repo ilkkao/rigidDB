@@ -117,6 +117,46 @@ describe('SetSchema', function() {
         });
     });
 
+    it('Invalid fields property in index definition', function() {
+        return store.setSchema(1, {
+            cars: {
+                definition: { color: 'string' },
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: 'color'
+                    }
+                }
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'SETSCHEMA',
+                reason: 'Invalid or missing index fields definition',
+                val: false
+            });
+        });
+    });
+
+    it('Invalid fields property in index definition', function() {
+        return store.setSchema(1, {
+            cars: {
+                definition: { color: 'string' },
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: []
+                    }
+                }
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                command: 'SETSCHEMA',
+                reason: 'Invalid or missing index fields definition',
+                val: false
+            });
+        });
+    });
+
     it('Invalid field name in index definition', function() {
         return store.setSchema(1, {
             cars: {

@@ -135,13 +135,105 @@ describe('Create', function() {
             dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.smembers('foo:car:i:color:convertible:mileage:blue:true:12345');
+            return redisClient.hget('foo:car:i:color:convertible:mileage', 'blue:true:12345');
         }).then(function(result) {
-            expect(result).to.deep.equal([ '1' ]);
+            expect(result).to.deep.equal('1');
 
             return redisClient.keys('*');
         }).then(function(result) {
             expect(result).to.have.length(8);
+        });
+    });
+
+    it('Redis is updated correctly when indices change from hash to set', function() {
+        store = new ObjectStore('bar', { db: 15 });
+
+        return store.setSchema(1, {
+            car: {
+                definition: {
+                    color: { type: 'string', allowNull: true },
+                    mileage: { type: 'int', allowNull: false },
+                    convertible: 'boolean',
+                    purchaseDate: 'date'
+                },
+                indices: {
+                    first: {
+                        uniq: false,
+                        fields: [ 'mileage' ]
+                    }
+                }
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: true
+            });
+
+            return store.create('car', {
+                color: 'white',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
+            });
+        }).then(function(result) {
+            return redisClient.hgetall('bar:car:i:mileage');
+        }).then(function(result) {
+            expect(result).to.deep.equal({ '12345': '1' });
+
+            return redisClient.smembers('bar:car:i:mileage:12345');
+        }).then(function(result) {
+            expect(result).to.deep.equal([]);
+
+            return store.create('car', {
+                color: 'blue',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 18:41:24 GMT+0000 (UTC)')
+            });
+        }).then(function(result) {
+            return redisClient.hgetall('bar:car:i:mileage');
+        }).then(function(result) {
+            expect(result).to.deep.equal({});
+
+            return redisClient.smembers('bar:car:i:mileage:12345');
+        }).then(function(result) {
+            expect(result).to.deep.equal([ '1', '2' ]);
+
+            return store.create('car', {
+                color: 'red',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 19:41:24 GMT+0000 (UTC)')
+            });
+        }).then(function(result) {
+            return redisClient.hgetall('bar:car:i:mileage');
+        }).then(function(result) {
+            expect(result).to.deep.equal({});
+
+            return redisClient.smembers('bar:car:i:mileage:12345');
+        }).then(function(result) {
+            expect(result).to.deep.equal([ '1', '2', '3' ]);
+
+            return store.delete('car', 3);
+        }).then(function(result) {
+            return store.delete('car', 1);
+        }).then(function(result) {
+            return redisClient.hgetall('bar:car:i:mileage');
+        }).then(function(result) {
+            expect(result).to.deep.equal({ '12345': '2' });
+
+            return redisClient.smembers('bar:car:i:mileage:12345');
+        }).then(function(result) {
+            expect(result).to.deep.equal([]);
+
+            return store.delete('car', 2);
+        }).then(function(result) {
+            return redisClient.hgetall('bar:car:i:mileage');
+        }).then(function(result) {
+            expect(result).to.deep.equal({});
+
+            return redisClient.smembers('bar:car:i:mileage:12345');
+        }).then(function(result) {
+            expect(result).to.deep.equal([]);
         });
     });
 

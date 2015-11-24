@@ -22,7 +22,7 @@ describe('Update', function() {
                         color: 'string',
                         mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
-                        purchaseDate: 'date'
+                        purchaseDate: { type: 'date', allowNull: true }
                     },
                     indices: {
                         first: {
@@ -135,9 +135,9 @@ describe('Update', function() {
             dateResult[new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.smembers('foo:car:i:color:convertible:mileage:red:false:4242');
+            return redisClient.hget('foo:car:i:color:convertible:mileage', 'red:false:4242');
         }).then(function(result) {
-            expect(result).to.deep.equal([ id.toString() ]);
+            expect(result).to.deep.equal(id.toString());
 
             return redisClient.keys('*');
         }).then(function(result) {
@@ -159,4 +159,18 @@ describe('Update', function() {
             });
         });
     });
+
+    it('Succeeds if null attribute is allowed', function() {
+        return store.update('car', id, {
+            color: 'red',
+            mileage: '1234',
+            convertible: false,
+            purchaseDate: null
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: true
+            });
+        });
+    });
+
 });

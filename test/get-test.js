@@ -19,7 +19,8 @@ describe('Get', function() {
             return store.setSchema(1, {
                 car: {
                     definition: {
-                        color: 'string',
+                        color: { type: 'string', allowNull: true },
+                        test: 'string',
                         mileage: 'int',
                         convertible: 'boolean',
                         purchaseDate: 'date',
@@ -39,7 +40,8 @@ describe('Get', function() {
             });
         }).then(function() {
             return store.create('car', {
-                color: 'blue',
+                color: null,
+                test: '~',
                 mileage: 12345,
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),
@@ -68,7 +70,8 @@ describe('Get', function() {
         return store.get('car', id).then(function(result) {
             expect(result).to.deep.equal({
                 val: {
-                    color: 'blue',
+                    color: null,
+                    test: '~',
                     mileage: 12345,
                     convertible: true,
                     purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),

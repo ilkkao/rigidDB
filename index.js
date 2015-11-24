@@ -95,10 +95,6 @@ ObjectStore.prototype.find = function(collection, searchAttrs) {
     return this._execSingle(this._find, 'FIND', collection, searchAttrs);
 };
 
-ObjectStore.prototype.findAll = function(collection, searchAttrs) {
-    return this._execSingle(this._findAll, 'FINDALL', collection, searchAttrs);
-};
-
 ObjectStore.prototype._setSchema = function(revision, schema) {
     let srcSchemaJSON = '';
 
@@ -301,9 +297,7 @@ ObjectStore.prototype._exec = function(ctx) {
             val = that._denormalizeAttrs(ret[3], val);
         } else if (command === 'EXISTS') {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
-        } else if (command === 'FIND') {
-            val = val ? parseInt(val) : false;
-        } else if (command === 'LIST' || command === 'FINDALL') {
+        } else if (command === 'LIST' || command === 'FIND') {
             val = val.map(item => parseInt(item));
         } else if (command === 'UPDATE' || command === 'DELETE' || command === 'none') {
             val = true;
@@ -372,7 +366,8 @@ ObjectStore.prototype._update = function(ctx, collection, id, attrs) {
         pushParams(ctx, redisAttrs.val[prop]);
     }
 
-    this._assertUniqIndicesFree(ctx, collection, 'UPDATE');
+    let indices = this._genAllIndices(ctx, collection);
+    this._assertUniqIndicesFree(ctx, collection, indices, 'UPDATE');
 
     genCode(ctx, `values = hgetall(key)`);
     this._removeIndices(ctx, collection, 'UPDATE');
@@ -431,42 +426,28 @@ ObjectStore.prototype._list = function(ctx, collection) {
 };
 
 ObjectStore.prototype._find = function(ctx, collection, attrs) {
-    this._findCommon(ctx, collection, attrs, true, 'FIND');
-};
-
-ObjectStore.prototype._findAll = function(ctx, collection, attrs) {
-    this._findCommon(ctx, collection, attrs, false, 'FINDALL');
-};
-
-ObjectStore.prototype._findCommon = function(ctx, collection, attrs, uniqIndex, command) {
     let indices = this.schema[collection].indices;
     let searchFields = Object.keys(attrs).sort().join();
     let indexFound = false;
-    let wrongIndexType = false;
 
     for (let indexName in indices) {
         let index = indices[indexName];
 
         if (index.fields.sort().join() === searchFields) {
-            if (index.uniq === uniqIndex) {
-                indexFound = true;
-            } else {
-                wrongIndexType = true;
-            }
-
+            indexFound = true;
             break;
         }
     }
 
     if (!indexFound) {
-        ctx.error = { command: command, err: wrongIndexType ? 'wrongIndexType' : 'unknownIndex' };
+        ctx.error = { command: 'FIND', err: 'unknownIndex' };
         return;
     }
 
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { command: command, err: redisAttrs.err };
+        ctx.error = { command: 'FIND', err: redisAttrs.err };
         return;
     }
 
@@ -475,10 +456,14 @@ ObjectStore.prototype._findCommon = function(ctx, collection, attrs, uniqIndex, 
     let fields = Object.keys(redisAttrs.val);
     let name = this._indexName(collection, fields);
     let prop = this._indexValues(fields);
-    let redisCommand = uniqIndex ? 'HGET' : 'SMEMBERS';
-    let redisParams =  uniqIndex ? `'${name}', ${prop}` : `'${name}:' .. ${prop}`
 
-    genCode(ctx, `ret = { '${command}', 'noError', redis.call('${redisCommand}', ${redisParams}) }`);
+    genCode(ctx, `local result = redis.call('HGET', '${name}', ${prop})`);
+    genCode(ctx, `if result ~= false then`);
+    genCode(ctx, `result = { result }`);
+    genCode(ctx, `else`);
+    genCode(ctx, `result = redis.call('SMEMBERS', '${name}:' .. ${prop})`);
+    genCode(ctx, `end`);
+    genCode(ctx, `ret = { 'FIND', 'noError', result }`);
 };
 
 ObjectStore.prototype._genAllIndices = function(ctx, collection) {
@@ -494,6 +479,7 @@ ObjectStore.prototype._genAllIndices = function(ctx, collection) {
             name: indexName,
             redisKey: this._indexName(collection, index.fields),
             redisValue: this._indexValues(index.fields),
+            fields: index.fields,
             uniq: index.uniq
         });
     }
@@ -510,17 +496,17 @@ ObjectStore.prototype._indexValues = function(fields) {
     return fields.sort().map(field => `(string.gsub(values["${field}"], ':', '::'))`).join(`..':'..`);
 };
 
-ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, command) {
-    let indices = this._genAllIndices(ctx, collection);
-
+ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, indices, command) {
     genCode(ctx, `local nonUniqIndices, uniqError = {}, false`);
 
     for (let index of indices) {
         if (index.uniq) {
+            let notNullCheck = index.fields.map(field => `values["${field}"] ~= '~'`).join(' and ');
+
             genCode(ctx, `local currentIndex = redis.call('HGET', '${index.redisKey}', ${index.redisValue})`);
-            genCode(ctx, `if currentIndex and currentIndex ~= id then`);
-            genCode(ctx, `table.insert(nonUniqIndices, '${index.name}')`)
-            genCode(ctx, `uniqError = true`)
+            genCode(ctx, `if currentIndex and currentIndex ~= id and ${notNullCheck} then`);
+            genCode(ctx, `table.insert(nonUniqIndices, '${index.name}')`);
+            genCode(ctx, `uniqError = true`);
             genCode(ctx, `end`);
         }
     }
@@ -533,14 +519,20 @@ ObjectStore.prototype._assertUniqIndicesFree = function(ctx, collection, command
 };
 
 ObjectStore.prototype._addIndices = function(ctx, collection, command) {
-    let indices = this._assertUniqIndicesFree(ctx, collection, command);
+    let indices = this._genAllIndices(ctx, collection);
+    this._assertUniqIndicesFree(ctx, collection, indices, command);
 
     for (let index of indices) {
-        if (index.uniq) {
-            genCode(ctx, `redis.call('HSET', '${index.redisKey}', ${index.redisValue}, id)`);
-        } else {
-            genCode(ctx, `redis.call('SADD', '${index.redisKey}:' .. ${index.redisValue}, id)`);
-        }
+        genCode(ctx, `local hashId = redis.call('HGET', '${index.redisKey}', ${index.redisValue})`);
+        genCode(ctx, `local isSet = redis.call('EXISTS', '${index.redisKey}:' .. ${index.redisValue})`);
+        genCode(ctx, `if not hashId and isSet == 0 then `);
+        genCode(ctx, `redis.call('HSET', '${index.redisKey}', ${index.redisValue}, id)`);
+        genCode(ctx, `elseif isSet == 0 then`);
+        genCode(ctx, `redis.call('HDEL', '${index.redisKey}', ${index.redisValue})`);
+        genCode(ctx, `redis.call('SADD', '${index.redisKey}:' .. ${index.redisValue}, id, hashId)`);
+        genCode(ctx, `else`);
+        genCode(ctx, `redis.call('SADD', '${index.redisKey}:' .. ${index.redisValue}, id)`);
+        genCode(ctx, `end`);
     }
 };
 
@@ -548,11 +540,16 @@ ObjectStore.prototype._removeIndices = function(ctx, collection) {
     let indices = this._genAllIndices(ctx, collection);
 
     for (let index of indices) {
-        if (index.uniq) {
-            genCode(ctx, `redis.call('HDEL', '${index.redisKey}', ${index.redisValue})`);
-        } else {
-            genCode(ctx, `redis.call('SREM', '${index.redisKey}:' .. ${index.redisValue}, id)`);
-        }
+        genCode(ctx, `local removed = redis.call('HDEL', '${index.redisKey}', ${index.redisValue})`);
+        genCode(ctx, `if removed == 0 then`);
+        genCode(ctx, `redis.call('SREM', '${index.redisKey}:' .. ${index.redisValue}, id)`);
+        genCode(ctx, `local remaining = redis.call('SCARD', '${index.redisKey}:' .. ${index.redisValue})`);
+        genCode(ctx, `if remaining == 1 then`);
+        genCode(ctx, `local last = redis.call('SMEMBERS', '${index.redisKey}:' .. ${index.redisValue})`);
+        genCode(ctx, `redis.call('DEL', '${index.redisKey}:' .. ${index.redisValue})`);
+        genCode(ctx, `redis.call('HSET', '${index.redisKey}', ${index.redisValue}, last[1])`);
+        genCode(ctx, `end`);
+        genCode(ctx, `end`);
     }
 };
 
