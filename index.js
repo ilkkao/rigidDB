@@ -99,19 +99,19 @@ RigidDB.prototype._setSchema = function(revision, schema) {
     let srcSchemaJSON = '';
 
     if (this.schema) {
-        return Promise.resolve({ val: false, reason: 'Schema already exists', command: 'SETSCHEMA'});
+        return Promise.resolve({ val: false, reason: 'Schema already exists', method: 'SETSCHEMA'});
     }
 
     try {
         srcSchemaJSON = JSON.stringify(schema);
     } catch(e) {
-        return Promise.resolve({ val: false, reason: 'Invalid schema.', command: 'SETSCHEMA' });
+        return Promise.resolve({ val: false, reason: 'Invalid schema.', method: 'SETSCHEMA' });
     }
 
     schema = this._verifySchema(schema);
 
     if (typeof(schema) == 'string') {
-        return Promise.resolve({ val: false, reason: schema, command: 'SETSCHEMA' });
+        return Promise.resolve({ val: false, reason: schema, method: 'SETSCHEMA' });
     }
 
     this.schema = schema;
@@ -191,7 +191,7 @@ RigidDB.prototype._getSchema = function() {
     let ret;
 
     if (!this.schema) {
-        ret = { val: false, err: 'schemaMissing', command: 'GETSCHEMA'};
+        ret = { val: false, err: 'schemaMissing', method: 'GETSCHEMA'};
     } else {
         ret = { val: { revision: 1, schema: this.srcSchema } };
     }
@@ -203,15 +203,15 @@ RigidDB.prototype._execMultiNow = function(cb) {
     let ctx = newContext();
 
     if (this.invalidSavedSchema) {
-        ctx.error = { command: 'MULTI', err: 'badSavedSchema' };
+        ctx.error = { method: 'MULTI', err: 'badSavedSchema' };
     } else if (!this.schema) {
-        ctx.error = { command: 'MULTI', err: 'schemaMissing' };
+        ctx.error = { method: 'MULTI', err: 'schemaMissing' };
     } else {
-        const execute = function(op, commandName, args) {
+        const execute = function(op, methodName, args) {
             let collection = args[0];
 
             if (!this.schema[collection]) {
-                ctx.error = { command: commandName, err: 'unknownCollection' };
+                ctx.error = { method: methodName, err: 'unknownCollection' };
             }
 
             if (!ctx.error) {
@@ -235,30 +235,30 @@ RigidDB.prototype._execMultiNow = function(cb) {
 
 RigidDB.prototype._execSingle = function() {
     let args = Array.prototype.slice.call(arguments);
-    let command = args.shift();
-    let commandName = args.shift();
+    let method = args.shift();
+    let methodName = args.shift();
 
     let ctx = newContext();
 
-    return this._whenSchemaLoaded(() => this._execSingleNow(ctx, command, commandName, args));
+    return this._whenSchemaLoaded(() => this._execSingleNow(ctx, method, methodName, args));
 };
 
-RigidDB.prototype._execSingleNow = function(ctx, command, commandName, args) {
+RigidDB.prototype._execSingleNow = function(ctx, method, methodName, args) {
     let collection = args[0];
 
  //   console.log(this);
 
     if (this.invalidSavedSchema) {
-        ctx.error = { command: commandName, err: 'badSavedSchema' };
+        ctx.error = { method: methodName, err: 'badSavedSchema' };
     } else if (!this.schema) {
-        ctx.error = { command: commandName, err: 'schemaMissing' };
+        ctx.error = { method: methodName, err: 'schemaMissing' };
     } else if (!this.schema[collection]) {
-        ctx.error = { command: commandName, err: 'unknownCollection' };
+        ctx.error = { method: methodName, err: 'unknownCollection' };
     }
 
     if (!ctx.error) {
         args.unshift(ctx);
-        command.apply(this, args);
+        method.apply(this, args);
     }
 
     return this._exec(ctx);
@@ -266,7 +266,7 @@ RigidDB.prototype._execSingleNow = function(ctx, command, commandName, args) {
 
 RigidDB.prototype._exec = function(ctx) {
     if (ctx.error) {
-        return Promise.resolve({ val: false, err: ctx.error.err, command: ctx.error.command });
+        return Promise.resolve({ val: false, err: ctx.error.err, method: ctx.error.method });
     }
 
     let code = `${utilityFuncs()}\n local ret = { 'none', 'noError' }\n ${ctx.script}\n return ret`;
@@ -279,25 +279,25 @@ RigidDB.prototype._exec = function(ctx) {
     debug(code);
 
     function decodeResult(ret) {
-        let command = ret[0];
+        let method = ret[0];
         let err = ret[1];
         let val = ret[2];
 
         if (err != 'noError') {
-            if (command === 'CREATE' || command == 'UPDATE') {
-                return { val: false, err: err, command: command, indices: val || [] };
+            if (method === 'CREATE' || method == 'UPDATE') {
+                return { val: false, err: err, method: method, indices: val || [] };
             } else {
-                return { val: false, err: err, command: command };
+                return { val: false, err: err, method: method };
             }
         }
 
-        if (command === 'GET') {
+        if (method === 'GET') {
             val = that._denormalizeAttrs(ret[3], val);
-        } else if (command === 'EXISTS') {
+        } else if (method === 'EXISTS') {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
-        } else if (command === 'LIST' || command === 'FIND') {
+        } else if (method === 'LIST' || method === 'FIND') {
             val = val.map(item => parseInt(item));
-        } else if (command === 'UPDATE' || command === 'DELETE' || command === 'none') {
+        } else if (method === 'UPDATE' || method === 'DELETE' || method === 'none') {
             val = true;
         }
 
@@ -322,13 +322,13 @@ RigidDB.prototype._create = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { command: 'CREATE', err: redisAttrs.err };
+        ctx.error = { method: 'CREATE', err: redisAttrs.err };
         return;
     }
 
     if (Object.keys(this.schema[collection].definition).sort().join(':') !==
         Object.keys(redisAttrs.val).sort().join(':')) {
-        ctx.error = { command: 'CREATE', err: 'badParameter' };
+        ctx.error = { method: 'CREATE', err: 'badParameter' };
         return;
     }
 
@@ -348,7 +348,7 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { command: 'UPDATE', err: redisAttrs.err };
+        ctx.error = { method: 'UPDATE', err: redisAttrs.err };
         return;
     }
 
@@ -438,14 +438,14 @@ RigidDB.prototype._find = function(ctx, collection, attrs) {
     }
 
     if (!indexFound) {
-        ctx.error = { command: 'FIND', err: 'unknownIndex' };
+        ctx.error = { method: 'FIND', err: 'unknownIndex' };
         return;
     }
 
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { command: 'FIND', err: redisAttrs.err };
+        ctx.error = { method: 'FIND', err: redisAttrs.err };
         return;
     }
 
@@ -494,7 +494,7 @@ RigidDB.prototype._indexValues = function(fields) {
     return fields.sort().map(field => `(string.gsub(values["${field}"], ':', '::'))`).join(`..':'..`);
 };
 
-RigidDB.prototype._assertUniqIndicesFree = function(ctx, collection, indices, command) {
+RigidDB.prototype._assertUniqIndicesFree = function(ctx, collection, indices, method) {
     genCode(ctx, `local nonUniqIndices, uniqError = {}, false`);
 
     for (let index of indices) {
@@ -510,15 +510,15 @@ RigidDB.prototype._assertUniqIndicesFree = function(ctx, collection, indices, co
     }
 
     genCode(ctx, `if uniqError then`);
-    genCode(ctx, `return { '${command}', 'notUnique', nonUniqIndices }`);
+    genCode(ctx, `return { '${method}', 'notUnique', nonUniqIndices }`);
     genCode(ctx, `end`);
 
     return indices;
 };
 
-RigidDB.prototype._addIndices = function(ctx, collection, command) {
+RigidDB.prototype._addIndices = function(ctx, collection, method) {
     let indices = this._genAllIndices(ctx, collection);
-    this._assertUniqIndicesFree(ctx, collection, indices, command);
+    this._assertUniqIndicesFree(ctx, collection, indices, method);
 
     for (let index of indices) {
         genCode(ctx, `local hashId = redis.call('HGET', '${index.redisKey}', ${index.redisValue})`);

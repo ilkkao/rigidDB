@@ -66,7 +66,7 @@ describe('Find', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 err: 'unknownIndex',
-                command: 'FIND',
+                method: 'FIND',
                 val: false
             });
         });
@@ -79,7 +79,7 @@ describe('Find', function() {
             convertible: false
         }).then(function(result) {
             expect(result).to.deep.equal({
-                command: 'FIND',
+                method: 'FIND',
                 err: 'nullNotAllowed',
                 val: false
             });

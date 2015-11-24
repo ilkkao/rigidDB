@@ -20,7 +20,7 @@ describe('GetSchema', function() {
     it('Fails when schema is not set', function() {
         return store.getSchema().then(function(result) {
             expect(result).to.deep.equal({
-                command: 'GETSCHEMA',
+                method: 'GETSCHEMA',
                 err: 'schemaMissing',
                 val: false
             });

@@ -53,7 +53,7 @@ describe('Multi', function() {
             expect(result).to.deep.equal({
                 err: 'badParameter',
                 val: false,
-                command: 'CREATE'
+                method: 'CREATE'
             });
         });
     });
@@ -167,7 +167,7 @@ describe('Multi', function() {
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                command: 'CREATE',
+                method: 'CREATE',
                 err: 'unknownCollection',
                 val: false
             });
@@ -183,7 +183,7 @@ describe('Multi', function() {
 
         return store.multi(function() {}).then(function(result) {
             expect(result).to.deep.equal({
-                command: 'MULTI',
+                method: 'MULTI',
                 err: 'schemaMissing',
                 val: false
             });
