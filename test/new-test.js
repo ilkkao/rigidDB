@@ -24,7 +24,7 @@ describe('Constructor', function() {
     it('Invalid existing schema causes error', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo:_schema', 'whatwhat');
-        }).then(function(result) {
+        }).then(function() {
             let store = new RigidDB('foo', {
                 db: 15
             });
@@ -42,7 +42,7 @@ describe('Constructor', function() {
     it('Invalid existing schema causes error', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo:_schema', '{ "cars": {} }');
-        }).then(function(result) {
+        }).then(function() {
             let store = new RigidDB('foo', {
                 db: 15
             });
@@ -60,14 +60,14 @@ describe('Constructor', function() {
     it('Invalid existing schema causes error for multi', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo:_schema', '{ "cars": {} }');
-        }).then(function(result) {
+        }).then(function() {
             let store = new RigidDB('foo', {
                 db: 15
             });
 
             return store.multi(function(tr) {
                 tr.create('cars', { color: 'black' });
-            })
+            });
         }).then(function(result) {
             expect(result).to.deep.equal({
                 err: 'badSavedSchema',

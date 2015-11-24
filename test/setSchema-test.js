@@ -1,7 +1,6 @@
 'use strict';
 
 const expect = require('chai').expect,
-      Redis = require('ioredis'),
       RigidDB = require('../index');
 
 let store = new RigidDB('foo', { db: 15 });
@@ -212,7 +211,7 @@ describe('SetSchema', function() {
             cars: {
                 definition: {
                     color: 'string',
-                    purchaseDate: 'date',
+                    purchaseDate: 'date'
                 },
                 indices: {
                     first: {

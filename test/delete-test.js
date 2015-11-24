@@ -35,8 +35,8 @@ describe('Delete', function() {
                         }
                     }
                 }
-            })
-        }).then(function(result) {
+            });
+        }).then(function() {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,

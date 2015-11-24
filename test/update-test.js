@@ -36,7 +36,7 @@ describe('Update', function() {
                     }
                 }
             });
-        }).then(function(result) {
+        }).then(function() {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
@@ -50,7 +50,7 @@ describe('Update', function() {
 
     it('Fails if id doesn\'t exists', function() {
         return store.update('car', 42, {
-            color: 'red',
+            color: 'red'
         }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'update',

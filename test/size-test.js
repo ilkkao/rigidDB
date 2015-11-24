@@ -9,7 +9,6 @@ let redisClient = new Redis({
 });
 
 let store;
-let id;
 
 describe('Size', function() {
     beforeEach(function() {
@@ -45,14 +44,14 @@ describe('Size', function() {
             mileage: 12345,
             convertible: true,
             purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-        }).then(function(result) {
+        }).then(function() {
             return store.create('car', {
                 color: 'black',
                 mileage: 4242,
                 convertible: false,
                 purchaseDate: new Date('Sun Nov 20 2015 07:41:24 GMT+0100 (CET)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return store.size('car');
         }).then(function(result) {
             expect(result).to.deep.equal({

@@ -9,7 +9,6 @@ let redisClient = new Redis({
 });
 
 let store;
-let id;
 
 describe('Find', function() {
     beforeEach(function() {
@@ -36,21 +35,21 @@ describe('Find', function() {
                     }
                 }
             });
-        }).then(function(result) {
+        }).then(function() {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return store.create('car', {
                 color: 'blue',
                 mileage: 12345,
@@ -90,7 +89,7 @@ describe('Find', function() {
         return store.find('car', {
             color: 'blue',
             mileage: 12346,
-            convertible: true,
+            convertible: true
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: []
@@ -102,7 +101,7 @@ describe('Find', function() {
         return store.find('car', {
             color: 'blue',
             mileage: 12345,
-            convertible: true,
+            convertible: true
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: [ 1, 2, 3 ]
@@ -116,14 +115,14 @@ describe('Find', function() {
             mileage: 12345,
             convertible: true,
             purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-        }).then(function(result) {
+        }).then(function() {
             return store.create('car', {
                 color: null,
                 mileage: 12346,
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return store.find('car', {
                 color: null,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')

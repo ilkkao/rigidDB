@@ -50,7 +50,7 @@ describe('Create', function() {
         return store.create('bikes', {
             color: 'blue',
             mileage: 12345,
-            convertible: true,
+            convertible: true
         }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'create',
@@ -64,7 +64,7 @@ describe('Create', function() {
         return store.create('car', {
             color: 'blue',
             mileage: 12345,
-            convertible: true,
+            convertible: true
         }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'create',
@@ -174,7 +174,7 @@ describe('Create', function() {
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return redisClient.hgetall('bar:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({ '12345': '1' });
@@ -189,7 +189,7 @@ describe('Create', function() {
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 18:41:24 GMT+0000 (UTC)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return redisClient.hgetall('bar:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({});
@@ -204,7 +204,7 @@ describe('Create', function() {
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 19:41:24 GMT+0000 (UTC)')
             });
-        }).then(function(result) {
+        }).then(function() {
             return redisClient.hgetall('bar:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({});
@@ -214,9 +214,9 @@ describe('Create', function() {
             expect(result).to.deep.equal([ '1', '2', '3' ]);
 
             return store.delete('car', 3);
-        }).then(function(result) {
+        }).then(function() {
             return store.delete('car', 1);
-        }).then(function(result) {
+        }).then(function() {
             return redisClient.hgetall('bar:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({ '12345': '2' });
@@ -226,7 +226,7 @@ describe('Create', function() {
             expect(result).to.deep.equal([]);
 
             return store.delete('car', 2);
-        }).then(function(result) {
+        }).then(function() {
             return redisClient.hgetall('bar:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({});
@@ -262,9 +262,9 @@ describe('Create', function() {
             purchaseDate: new Date('Sun Nov 15 2015 17:41:24 GMT+0000 (UTC)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-              method: 'create',
-              err: 'schemaMissing',
-              val: false
+                method: 'create',
+                err: 'schemaMissing',
+                val: false
             });
         });
     });

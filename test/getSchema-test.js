@@ -24,7 +24,7 @@ describe('GetSchema', function() {
                 err: 'schemaMissing',
                 val: false
             });
-        })
+        });
     });
 
     it('Returns correct original schema', function() {
@@ -48,7 +48,7 @@ describe('GetSchema', function() {
                     }
                 }
             }
-        }).then(function(result) {
+        }).then(function() {
             return store.getSchema();
         }).then(function(result) {
             expect(result).to.deep.equal({
@@ -76,6 +76,6 @@ describe('GetSchema', function() {
                     }
                 }
             });
-        })
+        });
     });
 });
