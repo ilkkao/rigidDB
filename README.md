@@ -2,8 +2,7 @@
 
 [![Build Status](https://secure.travis-ci.org/ilkkao/rigidDB.png)](http://travis-ci.org/ilkkao/rigidDB) [![Coverage Status](https://coveralls.io/repos/ilkkao/rigidDB/badge.svg?branch=master&service=github)](https://coveralls.io/github/ilkkao/rigidDB?branch=master)
 
-
-A promise based node module for saving searchable plain JavaScript objects to Redis. API methods are executed as atomic Lua transactions to avoid data corruption. Inserted data
+A promise based node module for saving searchable plain JavaScript objects to Redis. API methods are executed as atomic Lua scripts to avoid data/index corruption. Inserted data
 is type checked against a predefined schema.
 
 Node.js v4.0.0 or later required.
