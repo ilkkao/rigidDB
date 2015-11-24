@@ -73,7 +73,7 @@ describe('Size', function() {
         return store.size('bikes').then(function(result) {
             expect(result).to.deep.equal({
                 err: 'unknownCollection',
-                method: 'SIZE',
+                method: 'size',
                 val: false
             });
         });

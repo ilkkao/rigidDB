@@ -53,7 +53,7 @@ describe('Create', function() {
             convertible: true,
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'CREATE',
+                method: 'create',
                 err: 'unknownCollection',
                 val: false
             });
@@ -67,7 +67,7 @@ describe('Create', function() {
             convertible: true,
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'CREATE',
+                method: 'create',
                 err: 'badParameter',
                 val: false
             });
@@ -93,7 +93,7 @@ describe('Create', function() {
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'CREATE',
+                method: 'create',
                 err: 'notUnique',
                 val: false,
                 indices: [ 'first', 'third' ]
@@ -262,7 +262,7 @@ describe('Create', function() {
             purchaseDate: new Date('Sun Nov 15 2015 17:41:24 GMT+0000 (UTC)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-              method: 'CREATE',
+              method: 'create',
               err: 'schemaMissing',
               val: false
             });
@@ -277,7 +277,7 @@ describe('Create', function() {
             purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'CREATE',
+                method: 'create',
                 err: 'nullNotAllowed',
                 val: false
             });

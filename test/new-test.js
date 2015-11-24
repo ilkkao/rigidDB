@@ -33,7 +33,7 @@ describe('Constructor', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 err: 'badSavedSchema',
-                method: 'CREATE',
+                method: 'create',
                 val: false
             });
         });
@@ -51,7 +51,7 @@ describe('Constructor', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 err: 'badSavedSchema',
-                method: 'CREATE',
+                method: 'create',
                 val: false
             });
         });
@@ -71,7 +71,7 @@ describe('Constructor', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 err: 'badSavedSchema',
-                method: 'MULTI',
+                method: 'multi',
                 val: false
             });
         });

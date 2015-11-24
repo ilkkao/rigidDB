@@ -53,7 +53,7 @@ describe('Update', function() {
             color: 'red',
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'UPDATE',
+                method: 'update',
                 err: 'notFound',
                 val: false,
                 indices: []
@@ -80,7 +80,7 @@ describe('Update', function() {
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'UPDATE',
+                method: 'update',
                 err: 'notUnique',
                 val: false,
                 indices: [ 'first' ]
@@ -153,7 +153,7 @@ describe('Update', function() {
             purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'UPDATE',
+                method: 'update',
                 err: 'nullNotAllowed',
                 val: false
             });

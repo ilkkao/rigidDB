@@ -55,7 +55,7 @@ describe('Get', function() {
     it('Fails if id doesn\'t exist', function() {
         return store.get('car', 4242).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'GET',
+                method: 'get',
                 err: 'notFound',
                 val: false
             });

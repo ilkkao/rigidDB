@@ -10,7 +10,7 @@ describe('SetSchema', function() {
     it('Missing schema parameter', function() {
         return store.setSchema().then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid schema.',
                 val: false
             });
@@ -23,7 +23,7 @@ describe('SetSchema', function() {
 
         return store.setSchema(1, schema).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid schema.',
                 val: false
             });
@@ -33,7 +33,7 @@ describe('SetSchema', function() {
     it('Zero collections', function() {
         return store.setSchema(1, {}).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'At least one collection must be defined.',
                 val: false
             });
@@ -43,7 +43,7 @@ describe('SetSchema', function() {
     it('Missing collection definition', function() {
         return store.setSchema(1, { cars: {} }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Definition missing.',
                 val: false
             });
@@ -59,7 +59,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid field name (letters, numbers, and dashes allowed): \'co:lor\'',
                 val: false
             });
@@ -75,7 +75,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid type: \'wrong\'',
                 val: false
             });
@@ -91,7 +91,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Type definition missing.',
                 val: false
             });
@@ -110,7 +110,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid or missing index unique definition',
                 val: false
             });
@@ -130,7 +130,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid or missing index fields definition',
                 val: false
             });
@@ -150,7 +150,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid or missing index fields definition',
                 val: false
             });
@@ -170,7 +170,7 @@ describe('SetSchema', function() {
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Invalid index field: \'mileage\'',
                 val: false
             });
@@ -243,7 +243,7 @@ describe('SetSchema', function() {
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'SETSCHEMA',
+                method: 'setSchema',
                 reason: 'Schema already exists',
                 val: false
             });

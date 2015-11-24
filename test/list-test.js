@@ -73,7 +73,7 @@ describe('List', function() {
         return store.list('bikes').then(function(result) {
             expect(result).to.deep.equal({
                 err: 'unknownCollection',
-                method: 'LIST',
+                method: 'list',
                 val: false
             });
         });

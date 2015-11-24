@@ -51,7 +51,7 @@ describe('Delete', function() {
     it('Fails if id doesn\'t exists', function() {
         return store.delete('car', 42).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'DELETE',
+                method: 'delete',
                 err: 'notFound',
                 val: false
             });

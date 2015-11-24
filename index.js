@@ -60,31 +60,31 @@ RigidDB.prototype.getSchema = function() {
 };
 
 RigidDB.prototype.create = function(collection, attrs) {
-    return this._execSingle(this._create, 'CREATE', collection, attrs);
+    return this._execSingle(this._create, 'create', collection, attrs);
 };
 
 RigidDB.prototype.update = function(collection, id, attrs) {
-    return this._execSingle(this._update, 'UPDATE', collection, id, attrs);
+    return this._execSingle(this._update, 'update', collection, id, attrs);
 };
 
 RigidDB.prototype.delete = function(collection, id) {
-    return this._execSingle(this._delete, 'DELETE', collection, id);
+    return this._execSingle(this._delete, 'delete', collection, id);
 };
 
 RigidDB.prototype.get = function(collection, id) {
-    return this._execSingle(this._get, 'GET', collection, id);
+    return this._execSingle(this._get, 'get', collection, id);
 };
 
 RigidDB.prototype.exists = function(collection, id) {
-    return this._execSingle(this._exists, 'EXISTS', collection, id);
+    return this._execSingle(this._exists, 'exists', collection, id);
 };
 
 RigidDB.prototype.list = function(collection) {
-    return this._execSingle(this._list, 'LIST', collection);
+    return this._execSingle(this._list, 'list', collection);
 };
 
 RigidDB.prototype.size = function(collection) {
-    return this._execSingle(this._size, 'SIZE', collection);
+    return this._execSingle(this._size, 'size', collection);
 };
 
 RigidDB.prototype.multi = function(cb) {
@@ -92,26 +92,26 @@ RigidDB.prototype.multi = function(cb) {
 };
 
 RigidDB.prototype.find = function(collection, searchAttrs) {
-    return this._execSingle(this._find, 'FIND', collection, searchAttrs);
+    return this._execSingle(this._find, 'find', collection, searchAttrs);
 };
 
 RigidDB.prototype._setSchema = function(revision, schema) {
     let srcSchemaJSON = '';
 
     if (this.schema) {
-        return Promise.resolve({ val: false, reason: 'Schema already exists', method: 'SETSCHEMA'});
+        return Promise.resolve({ val: false, reason: 'Schema already exists', method: 'setSchema'});
     }
 
     try {
         srcSchemaJSON = JSON.stringify(schema);
     } catch(e) {
-        return Promise.resolve({ val: false, reason: 'Invalid schema.', method: 'SETSCHEMA' });
+        return Promise.resolve({ val: false, reason: 'Invalid schema.', method: 'setSchema' });
     }
 
     schema = this._verifySchema(schema);
 
     if (typeof(schema) == 'string') {
-        return Promise.resolve({ val: false, reason: schema, method: 'SETSCHEMA' });
+        return Promise.resolve({ val: false, reason: schema, method: 'setSchema' });
     }
 
     this.schema = schema;
@@ -191,7 +191,7 @@ RigidDB.prototype._getSchema = function() {
     let ret;
 
     if (!this.schema) {
-        ret = { val: false, err: 'schemaMissing', method: 'GETSCHEMA'};
+        ret = { val: false, err: 'schemaMissing', method: 'getSchema'};
     } else {
         ret = { val: { revision: 1, schema: this.srcSchema } };
     }
@@ -203,9 +203,9 @@ RigidDB.prototype._execMultiNow = function(cb) {
     let ctx = newContext();
 
     if (this.invalidSavedSchema) {
-        ctx.error = { method: 'MULTI', err: 'badSavedSchema' };
+        ctx.error = { method: 'multi', err: 'badSavedSchema' };
     } else if (!this.schema) {
-        ctx.error = { method: 'MULTI', err: 'schemaMissing' };
+        ctx.error = { method: 'multi', err: 'schemaMissing' };
     } else {
         const execute = function(op, methodName, args) {
             let collection = args[0];
@@ -220,11 +220,11 @@ RigidDB.prototype._execMultiNow = function(cb) {
         }.bind(this);
 
         let api = {
-            create: (collection, attrs) => execute('_create', 'CREATE', [ collection, attrs ]),
-            update: (collection, id, attrs) => execute('_update', 'UPDATE', [ collection, id, attrs ]),
-            delete: (collection, id) => execute('_delete', 'DELETE', [ collection, id ]),
-            get: (collection, id) => execute('_get', 'GET', [ collection, id ]),
-            exists: (collection, id) => execute('_exists', 'EXISTS', [ collection, id ])
+            create: (collection, attrs) => execute('_create', 'create', [ collection, attrs ]),
+            update: (collection, id, attrs) => execute('_update', 'update', [ collection, id, attrs ]),
+            delete: (collection, id) => execute('_delete', 'delete', [ collection, id ]),
+            get: (collection, id) => execute('_get', 'get', [ collection, id ]),
+            exists: (collection, id) => execute('_exists', 'exists', [ collection, id ])
         };
 
         cb(api);
@@ -284,20 +284,20 @@ RigidDB.prototype._exec = function(ctx) {
         let val = ret[2];
 
         if (err != 'noError') {
-            if (method === 'CREATE' || method == 'UPDATE') {
+            if (method === 'create' || method == 'update') {
                 return { val: false, err: err, method: method, indices: val || [] };
             } else {
                 return { val: false, err: err, method: method };
             }
         }
 
-        if (method === 'GET') {
+        if (method === 'get') {
             val = that._denormalizeAttrs(ret[3], val);
-        } else if (method === 'EXISTS') {
+        } else if (method === 'exists') {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
-        } else if (method === 'LIST' || method === 'FIND') {
+        } else if (method === 'list' || method === 'find') {
             val = val.map(item => parseInt(item));
-        } else if (method === 'UPDATE' || method === 'DELETE' || method === 'none') {
+        } else if (method === 'update' || method === 'delete' || method === 'none') {
             val = true;
         }
 
@@ -322,13 +322,13 @@ RigidDB.prototype._create = function(ctx, collection, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { method: 'CREATE', err: redisAttrs.err };
+        ctx.error = { method: 'create', err: redisAttrs.err };
         return;
     }
 
     if (Object.keys(this.schema[collection].definition).sort().join(':') !==
         Object.keys(redisAttrs.val).sort().join(':')) {
-        ctx.error = { method: 'CREATE', err: 'badParameter' };
+        ctx.error = { method: 'create', err: 'badParameter' };
         return;
     }
 
@@ -336,19 +336,19 @@ RigidDB.prototype._create = function(ctx, collection, attrs) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
     this._addValuesVar(ctx, redisAttrs.val);
 
-    this._addIndices(ctx, collection, 'CREATE');
+    this._addIndices(ctx, collection, 'create');
 
     genCode(ctx, `hmset(key, values)`);
     genCode(ctx, `redis.call('ZADD', '${this.prefix}:${collection}:ids', id, id)`);
 
-    genCode(ctx, `ret = { 'CREATE', 'noError', id }`);
+    genCode(ctx, `ret = { 'create', 'noError', id }`);
 };
 
 RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { method: 'UPDATE', err: redisAttrs.err };
+        ctx.error = { method: 'update', err: redisAttrs.err };
         return;
     }
 
@@ -356,7 +356,7 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     pushParams(ctx, id);
 
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'UPDATE', 'notFound' } end`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'update', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
     for (let prop in redisAttrs.val) {
@@ -365,62 +365,62 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     }
 
     let indices = this._genAllIndices(ctx, collection);
-    this._assertUniqIndicesFree(ctx, collection, indices, 'UPDATE');
+    this._assertUniqIndicesFree(ctx, collection, indices, 'update');
 
     genCode(ctx, `values = hgetall(key)`);
-    this._removeIndices(ctx, collection, 'UPDATE');
+    this._removeIndices(ctx, collection, 'update');
 
     for (let prop in redisAttrs.val) {
         genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
         pushParams(ctx, redisAttrs.val[prop]);
     }
 
-    this._addIndices(ctx, collection, 'UPDATE');
+    this._addIndices(ctx, collection, 'update');
 
     genCode(ctx, `hmset(key, values)`);
-    genCode(ctx, `ret = { 'UPDATE', 'noError', true }`);
+    genCode(ctx, `ret = { 'update', 'noError', true }`);
 };
 
 RigidDB.prototype._delete = function(ctx, collection, id) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'DELETE', 'notFound' } end`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'delete', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
-    this._removeIndices(ctx, collection, 'DELETE');
+    this._removeIndices(ctx, collection, 'delete');
 
     genCode(ctx, `redis.call('ZREM', '${this.prefix}:${collection}:ids', id)`);
     genCode(ctx, `redis.call('DEL', key)`);
-    genCode(ctx, `ret = { 'DELETE', 'noError' }`);
+    genCode(ctx, `ret = { 'delete', 'noError' }`);
 
     pushParams(ctx, id);
 };
 
 RigidDB.prototype._get = function(ctx, collection, id) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'GET', 'notFound' } end`);
-    genCode(ctx, `ret = { 'GET', 'noError', redis.call('HGETALL', key), '${collection}' }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'get', 'notFound' } end`);
+    genCode(ctx, `ret = { 'get', 'noError', redis.call('HGETALL', key), '${collection}' }`);
 
     pushParams(ctx, id);
 };
 
 RigidDB.prototype._exists = function(ctx, collection, id) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'EXISTS', 'noError', 0 } end`);
-    genCode(ctx, `ret = { 'EXISTS', 'noError', 1 }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'exists', 'noError', 0 } end`);
+    genCode(ctx, `ret = { 'exists', 'noError', 1 }`);
 
     pushParams(ctx, id);
 };
 
 RigidDB.prototype._size = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
-    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'SIZE', 'noError', 0 } end`);
-    genCode(ctx, `ret = { 'SIZE', 'noError', redis.call('ZCARD', key) }`);
+    genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'size', 'noError', 0 } end`);
+    genCode(ctx, `ret = { 'size', 'noError', redis.call('ZCARD', key) }`);
 };
 
 RigidDB.prototype._list = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
-    genCode(ctx, `ret = { 'LIST', 'noError', redis.call("ZRANGE", key, 0, -1) }`);
+    genCode(ctx, `ret = { 'list', 'noError', redis.call("ZRANGE", key, 0, -1) }`);
 };
 
 RigidDB.prototype._find = function(ctx, collection, attrs) {
@@ -438,14 +438,14 @@ RigidDB.prototype._find = function(ctx, collection, attrs) {
     }
 
     if (!indexFound) {
-        ctx.error = { method: 'FIND', err: 'unknownIndex' };
+        ctx.error = { method: 'find', err: 'unknownIndex' };
         return;
     }
 
     let redisAttrs = this._normalizeAttrs(collection, attrs);
 
     if (redisAttrs.err) {
-        ctx.error = { method: 'FIND', err: redisAttrs.err };
+        ctx.error = { method: 'find', err: redisAttrs.err };
         return;
     }
 
@@ -461,7 +461,7 @@ RigidDB.prototype._find = function(ctx, collection, attrs) {
     genCode(ctx, `else`);
     genCode(ctx, `result = redis.call('SMEMBERS', '${name}:' .. ${prop})`);
     genCode(ctx, `end`);
-    genCode(ctx, `ret = { 'FIND', 'noError', result }`);
+    genCode(ctx, `ret = { 'find', 'noError', result }`);
 };
 
 RigidDB.prototype._genAllIndices = function(ctx, collection) {
