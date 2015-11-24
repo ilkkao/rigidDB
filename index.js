@@ -654,7 +654,7 @@ function newContext() {
 }
 
 function genCode(ctx, lua) {
-    ctx.script += lua + '\n';
+    ctx.script += `${lua}\n`;
 }
 
 function pushParams(ctx, params) {
