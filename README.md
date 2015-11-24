@@ -6,6 +6,8 @@
 A promise based node module for saving searchable plain JavaScript objects to Redis. API methods are executed as atomic Lua transactions to avoid data corruption. Inserted data
 is type checked against a predefined schema.
 
+Node.js v4.0.0 or later required.
+
 ## Installation
 
 `npm install --save rigiddb`
