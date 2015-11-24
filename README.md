@@ -23,8 +23,8 @@ let store = new RigidDB('mydb');
 store.setSchema({
     cars: {
         definition: {
-            color: 'string',
-            mileage: 'int',
+            color: { type: 'string', allowNull: true },
+            mileage: 'int', // A shortcut for { type: 'int', allowNull: false }
             convertible: 'boolean',
             purchaseDate: 'date'
         },
