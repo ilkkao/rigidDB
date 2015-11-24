@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 let cachedScripts = {};
 
-function ObjectStore(prefix, opts) {
+function ObjectStore(prefix, redisOpts) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
     }
@@ -16,13 +16,13 @@ function ObjectStore(prefix, opts) {
     this.invalidSavedSchema = false;
     this.schema = null;
 
-    opts = opts || {};
+    redisOpts = redisOpts || {};
 
     this.client = new Redis({
-        port: opts.port || undefined,
-        host: opts.host || undefined,
-        password: opts.password || undefined,
-        db: opts.db || undefined
+        port: redisOpts.port,
+        host: redisOpts.host,
+        password: redisOpts.password,
+        db: redisOpts.db
     });
 
     this.schemaPromise = this.client.get(`${prefix}:_schema`).then(result => {
