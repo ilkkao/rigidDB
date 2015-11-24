@@ -47,7 +47,7 @@ function ObjectStore(prefix, redisOpts) {
     });
 }
 
-ObjectStore.prototype.quit = function(schema) {
+ObjectStore.prototype.quit = function() {
     return this.client.quit();
 };
 
