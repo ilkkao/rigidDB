@@ -178,6 +178,10 @@ ObjectStore.prototype._verifySchema = function(schema) {
                 return 'Invalid or missing index unique definition';
             }
 
+            if (!index.fields || !(index.fields instanceof Array) || index.fields.length == 0) {
+                return 'Invalid or missing index fields definition';
+            }
+
             for (let field of index.fields) {
                 if (fieldNames.indexOf(field) === -1) {
                     return `Invalid index field: '${field}'`;
