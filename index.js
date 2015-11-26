@@ -38,12 +38,12 @@ function RigidDB(prefix, redisOpts) {
                 return;
             }
 
-            let normalizedSchema = this._verifySchema(this.srcSchema);
+            let ret = this._verifySchema(this.srcSchema);
 
-            if (typeof(normalizedSchema) === 'string') {
+            if (ret.err) {
                 this.invalidSavedSchema = true;
             } else {
-                this.schema = normalizedSchema;
+                this.schema = ret.schema;
             }
         }
     });
@@ -124,13 +124,13 @@ RigidDB.prototype._setSchema = function(revision, schema) {
         return Promise.resolve({ val: false, reason: 'Invalid schema.', method: 'setSchema' });
     }
 
-    schema = this._verifySchema(schema);
+    let ret = this._verifySchema(schema);
 
-    if (typeof(schema) == 'string') {
-        return Promise.resolve({ val: false, reason: schema, method: 'setSchema' });
+    if (ret.err) {
+        return Promise.resolve({ val: false, reason: ret.err, method: 'setSchema' });
     }
 
-    this.schema = schema;
+    this.schema = ret.schema;
     this.srcSchema = JSON.parse(srcSchemaJSON); // Clone
 
     return this.client.set(`${this.prefix}:_schema`, srcSchemaJSON)
@@ -140,13 +140,13 @@ RigidDB.prototype._setSchema = function(revision, schema) {
 
 RigidDB.prototype._verifySchema = function(schema) {
     if (typeof(schema) !== 'object' || schema === null) {
-        return 'Invalid schema.';
+        return { err: 'Invalid schema.' };
     }
 
     let collections = Object.keys(schema);
 
     if (collections.length === 0) {
-        return 'At least one collection must be defined.';
+        return { err: 'At least one collection must be defined.' };
     }
 
     for (let collectionName of collections) {
@@ -154,14 +154,14 @@ RigidDB.prototype._verifySchema = function(schema) {
         let indices =  schema[collectionName].indices || {};
 
         if (!definition) {
-            return 'Definition missing.';
+            return { err: 'Definition missing.' };
         }
 
         let fieldNames = Object.keys(definition);
 
         for (let fieldName of fieldNames) {
             if (!onlyLettersNumbersDashes(fieldName)) {
-                return `Invalid field name (letters, numbers, and dashes allowed): '${fieldName}'`;
+                return { err: `Invalid field name (letters, numbers, and dashes allowed): '${fieldName}'` };
             }
 
             if (typeof(definition[fieldName]) === 'string') {
@@ -171,11 +171,11 @@ RigidDB.prototype._verifySchema = function(schema) {
             let type = definition[fieldName];
 
             if (!type || !type.type) {
-                return `Type definition missing.`;
+                return { err: `Type definition missing.` };
             }
 
             if (!/^(string|int|boolean|date|timestamp)$/.test(type.type)) {
-                return `Invalid type: '${type.type}'`;
+                return { err: `Invalid type: '${type.type}'` };
             }
 
             type.allowMulti = !!type.allowMulti;
@@ -185,22 +185,22 @@ RigidDB.prototype._verifySchema = function(schema) {
             let index = indices[indexName];
 
             if (!(index.uniq === true || index.uniq === false)) {
-                return 'Invalid or missing index unique definition';
+                return { err: 'Invalid or missing index unique definition' };
             }
 
             if (!index.fields || !(index.fields instanceof Array) || index.fields.length == 0) {
-                return 'Invalid or missing index fields definition';
+                return { err: 'Invalid or missing index fields definition' };
             }
 
             for (let field of index.fields) {
                 if (fieldNames.indexOf(field) === -1) {
-                    return `Invalid index field: '${field}'`;
+                    return { err: `Invalid index field: '${field}'` };
                 }
             }
         }
     }
 
-    return schema;
+    return { err: false, schema: schema };
 };
 
 RigidDB.prototype._getSchema = function() {
