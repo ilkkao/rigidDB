@@ -82,6 +82,8 @@ store.setSchema({
 
 ### find(collection, searchAttributes)
 
+### debugPrint(collection)
+
 ### quit()
 
 ## Supported data types

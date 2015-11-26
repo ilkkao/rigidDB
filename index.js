@@ -4,6 +4,8 @@ const debug = require('debug')('code');
 const Redis = require('ioredis');
 const crypto = require('crypto');
 
+require('console.table');
+
 let cachedScripts = {};
 
 function RigidDB(prefix, redisOpts) {
@@ -93,6 +95,20 @@ RigidDB.prototype.multi = function(cb) {
 
 RigidDB.prototype.find = function(collection, searchAttrs) {
     return this._execSingle(this._find, 'find', collection, searchAttrs);
+};
+
+// Print is for debugging, doesn't scale currently
+RigidDB.prototype.debugPrint = function(collection) {
+    let data = [];
+
+    return this.client.zrange(`${this.prefix}:${collection}:ids`, 0, -1).then(ids =>
+        ids.reduce((sequence, id) => sequence.then(() =>
+            this.client.hgetall(`${this.prefix}:${collection}:${id}`).then(result => {
+                result.id = id;
+                data.push(result);
+            })), Promise.resolve())).then(() => {
+                console.table(data);
+            });
 };
 
 RigidDB.prototype._setSchema = function(revision, schema) {
