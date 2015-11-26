@@ -103,6 +103,7 @@ RigidDB.prototype.debugPrint = function(collection) {
     return this.client.zrange(`${this.prefix}:${collection}:ids`, 0, -1).then(ids =>
         ids.reduce((sequence, id) => sequence.then(() =>
             this.client.hgetall(`${this.prefix}:${collection}:${id}`).then(result => {
+                result = this._denormalizeAttrsForPrinting(collection, result);
                 result.id = id;
                 data.push(result);
             })), Promise.resolve())).then(() => {
@@ -646,6 +647,40 @@ RigidDB.prototype._denormalizeAttrs = function(collection, redisRetVal) {
             }
 
             ret[prop] = redisVal;
+        }
+    }
+
+    return ret;
+};
+
+RigidDB.prototype._denormalizeAttrsForPrinting = function(collection, redisObject) {
+    let ret = {};
+
+    for (let prop of Object.keys(redisObject)) {
+        let redisVal = redisObject[prop];
+        let propType = this.schema[collection].definition[prop];
+
+        if (redisVal === '~') {
+            ret[prop] = '[NULL]';
+        } else {
+            switch (propType.type) {
+                case 'int':
+                    ret[prop] = parseInt(redisVal);
+                    break;
+                case 'string':
+                    if (/^~+$/.test(redisVal)) {
+                        ret[prop] = redisVal.substring(1);
+                    }
+
+                    ret[prop] = `"${redisVal}"`;
+                    break;
+                case 'date':
+                    ret[prop] = new Date(redisVal).toString();
+                    break;
+                case 'timestamp':
+                    ret[prop] = new Date(parseInt(redisVal).toString());
+                    break;
+            }
         }
     }
 
