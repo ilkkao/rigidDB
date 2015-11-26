@@ -2,7 +2,8 @@
 
 const debug = require('debug')('code'),
     Redis = require('ioredis'),
-    crypto = require('crypto');
+    crypto = require('crypto'),
+    clone = require('clone');
 
 require('console.table');
 
@@ -130,8 +131,8 @@ RigidDB.prototype._setSchema = function(revision, schema) {
         return Promise.resolve({ val: false, reason: ret.err, method: 'setSchema' });
     }
 
+    this.srcSchema = schema;
     this.schema = ret.schema;
-    this.srcSchema = JSON.parse(srcSchemaJSON); // Clone
 
     return this.client.set(`${this.prefix}:_schema`, srcSchemaJSON)
         .then(() => this.client.set(`${this.prefix}:_schemaRevision`, revision))
@@ -139,6 +140,8 @@ RigidDB.prototype._setSchema = function(revision, schema) {
 };
 
 RigidDB.prototype._verifySchema = function(schema) {
+    schema = clone(schema);
+
     if (typeof(schema) !== 'object' || schema === null) {
         return { err: 'Invalid schema.' };
     }
