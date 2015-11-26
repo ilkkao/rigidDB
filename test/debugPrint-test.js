@@ -66,15 +66,15 @@ describe('Find', function() {
                     extra: '\"~\"',
                     id: '1',
                     mileage: 12345,
-                    purchaseDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)',
-                    serviceDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'
+                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString(),
+                    serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
                 }, {
                     color: '\"blue\"',
                     extra: '\"~~~\"',
                     id: '2',
                     mileage: 12345,
-                    purchaseDate: 'Sun Nov 01 2015 22:41:24 GMT+0100 (CET)',
-                    serviceDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'
+                    purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)').toString(),
+                    serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
                 }
             ]);
         };
