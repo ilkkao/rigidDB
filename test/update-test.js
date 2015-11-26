@@ -106,7 +106,8 @@ describe('Update', function() {
             color: 'red',
             mileage: 4242,
             convertible: false,
-            purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)')
+            purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)'),
+            foobar: new Date(NaN) // Properties not in schema are ignored
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: true

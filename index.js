@@ -587,6 +587,10 @@ RigidDB.prototype._normalizeAttrs = function(collection, attrs) {
         let propVal = attrs[prop];
         let redisVal;
 
+        if (!propType) {
+            continue;
+        }
+
         if (propVal === null) {
             if (!propType.allowNull) {
                 return { err: `nullNotAllowed` };
