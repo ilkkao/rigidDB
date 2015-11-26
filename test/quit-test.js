@@ -1,7 +1,7 @@
 'use strict';
 
 const expect = require('chai').expect,
-      RigidDB = require('../index');
+    RigidDB = require('../index');
 
 let store;
 

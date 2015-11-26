@@ -4,9 +4,9 @@
   "description": "Object store with an index and strict schema",
   "main": "index.js",
   "scripts": {
-    "test": "istanbul cover _mocha",
+    "test": "npm run lint && istanbul cover _mocha",
     "coveralls": "cat ./coverage/lcov.info | coveralls",
-    "lint": "eslint *.js **/*.js"
+    "lint": "eslint index.js test"
   },
   "repository": {
     "type": "git",

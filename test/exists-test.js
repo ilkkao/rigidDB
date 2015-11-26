@@ -1,8 +1,8 @@
 'use strict';
 
 const expect = require('chai').expect,
-      Redis = require('ioredis'),
-      RigidDB = require('../index');
+    Redis = require('ioredis'),
+    RigidDB = require('../index');
 
 let redisClient = new Redis({
     db: 15

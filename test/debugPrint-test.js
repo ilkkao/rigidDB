@@ -1,8 +1,7 @@
 'use strict';
 
-const expect = require('chai').expect,
-      Redis = require('ioredis'),
-      RigidDB = require('../index');
+const Redis = require('ioredis'),
+    RigidDB = require('../index');
 
 let redisClient = new Redis({
     db: 15
@@ -60,7 +59,7 @@ describe('Find', function() {
     });
 
     it('Prints collection', function() {
-        return store.debugPrint('cars').then(function(result) {
+        return store.debugPrint('cars').then(function() {
         });
     });
 });

@@ -1,8 +1,8 @@
 'use strict';
 
-const debug = require('debug')('code');
-const Redis = require('ioredis');
-const crypto = require('crypto');
+const debug = require('debug')('code'),
+    Redis = require('ioredis'),
+    crypto = require('crypto');
 
 require('console.table');
 
@@ -107,7 +107,7 @@ RigidDB.prototype.debugPrint = function(collection) {
                 result.id = id;
                 data.push(result);
             })), Promise.resolve())).then(() => {
-                console.table(data);
+                console.table(data); // eslint-disable-line no-console
             });
 };
 
