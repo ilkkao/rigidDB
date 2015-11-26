@@ -39,7 +39,7 @@ function RigidDB(prefix, redisOpts) {
                 return;
             }
 
-            let ret = this._verifySchema(this.srcSchema);
+            let ret = this._normalizeAndVerifySchema(this.srcSchema);
 
             if (ret.err) {
                 this.invalidSavedSchema = true;
@@ -125,7 +125,7 @@ RigidDB.prototype._setSchema = function(revision, schema) {
         return Promise.resolve({ val: false, reason: 'Invalid schema.', method: 'setSchema' });
     }
 
-    let ret = this._verifySchema(schema);
+    let ret = this._normalizeAndVerifySchema(schema);
 
     if (ret.err) {
         return Promise.resolve({ val: false, reason: ret.err, method: 'setSchema' });
@@ -139,7 +139,7 @@ RigidDB.prototype._setSchema = function(revision, schema) {
         .then(() => ({ val: true }));
 };
 
-RigidDB.prototype._verifySchema = function(schema) {
+RigidDB.prototype._normalizeAndVerifySchema = function(schema) {
     schema = clone(schema);
 
     if (typeof(schema) !== 'object' || schema === null) {
