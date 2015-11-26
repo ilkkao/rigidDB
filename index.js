@@ -207,15 +207,8 @@ RigidDB.prototype._verifySchema = function(schema) {
 };
 
 RigidDB.prototype._getSchema = function() {
-    let ret;
-
-    if (!this.schema) {
-        ret = { val: false, err: 'schemaMissing', method: 'getSchema'};
-    } else {
-        ret = { val: { revision: 1, schema: this.srcSchema } };
-    }
-
-    return Promise.resolve(ret);
+    return Promise.resolve(this.schema ? { val: { revision: 1, schema: this.srcSchema } } :
+        { val: false, err: 'schemaMissing', method: 'getSchema'});
 };
 
 RigidDB.prototype._execMultiNow = function(cb) {
@@ -226,7 +219,7 @@ RigidDB.prototype._execMultiNow = function(cb) {
     } else if (!this.schema) {
         ctx.error = { method: 'multi', err: 'schemaMissing' };
     } else {
-        const execute = function(op, methodName, args) {
+        const execute = (op, methodName, args) => {
             let collection = args[0];
 
             if (!this.schema[collection]) {
@@ -236,7 +229,7 @@ RigidDB.prototype._execMultiNow = function(cb) {
             if (!ctx.error) {
                 this[op].apply(this, [ ctx ].concat(args));
             }
-        }.bind(this);
+        };
 
         let api = {
             create: (collection, attrs) => execute('_create', 'create', [ collection, attrs ]),
@@ -265,8 +258,6 @@ RigidDB.prototype._execSingle = function() {
 RigidDB.prototype._execSingleNow = function(ctx, method, methodName, args) {
     let collection = args[0];
 
- //   console.log(this);
-
     if (this.invalidSavedSchema) {
         ctx.error = { method: methodName, err: 'badSavedSchema' };
     } else if (!this.schema) {
@@ -292,12 +283,11 @@ RigidDB.prototype._exec = function(ctx) {
 
     let sha1 = crypto.createHash('sha1').update(code).digest('hex');
     let evalParams = [ sha1, 0 ].concat(ctx.params);
-    let that = this;
 
     debug(`PARAMETERS : ${ctx.params}`);
     debug(code);
 
-    function decodeResult(ret) {
+    const decodeResult = ret => {
         let method = ret[0];
         let err = ret[1];
         let val = ret[2];
@@ -311,7 +301,7 @@ RigidDB.prototype._exec = function(ctx) {
         }
 
         if (method === 'get') {
-            val = that._denormalizeAttrs(ret[3], val);
+            val = this._denormalizeAttrs(ret[3], val);
         } else if (method === 'exists') {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
         } else if (method === 'list' || method === 'find') {
@@ -321,14 +311,14 @@ RigidDB.prototype._exec = function(ctx) {
         }
 
         return { val: val };
-    }
+    };
 
     if (cachedScripts[sha1]) {
         return this.client.evalsha.apply(this.client, evalParams).then(decodeResult);
     } else {
         return this.client.script('load', code).then(() => {
             cachedScripts[sha1] = true;
-            return that.client.evalsha.apply(that.client, evalParams).then(decodeResult);
+            return this.client.evalsha.apply(this.client, evalParams).then(decodeResult);
         });
     }
 };
