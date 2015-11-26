@@ -7,8 +7,6 @@ const debug = require('debug')('code'),
 
 require('console.table');
 
-let cachedScripts = {};
-
 function RigidDB(prefix, redisOpts) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
@@ -313,14 +311,11 @@ RigidDB.prototype._exec = function(ctx) {
         return { val: val };
     };
 
-    if (cachedScripts[sha1]) {
-        return this.client.evalsha.apply(this.client, evalParams).then(decodeResult);
-    } else {
-        return this.client.script('load', code).then(() => {
-            cachedScripts[sha1] = true;
-            return this.client.evalsha.apply(this.client, evalParams).then(decodeResult);
-        });
-    }
+    const redisEval = (failure) => this.client.evalsha(evalParams).then(decodeResult, failure);
+
+    // Try to evaluate by SHA first. If that fails, load the script. If it still fails, give up and
+    // do nothing.
+    return redisEval(() => this.client.script('load', code).then(redisEval));
 };
 
 RigidDB.prototype._whenSchemaLoaded = function(cb) {
