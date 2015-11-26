@@ -669,7 +669,7 @@ RigidDB.prototype._denormalizeAttrsForPrinting = function(collection, redisObjec
                     break;
                 case 'string':
                     if (/^~+$/.test(redisVal)) {
-                        ret[prop] = redisVal.substring(1);
+                        redisVal = redisVal.substring(1);
                     }
 
                     ret[prop] = `"${redisVal}"`;
@@ -678,7 +678,7 @@ RigidDB.prototype._denormalizeAttrsForPrinting = function(collection, redisObjec
                     ret[prop] = new Date(redisVal).toString();
                     break;
                 case 'timestamp':
-                    ret[prop] = new Date(parseInt(redisVal).toString());
+                    ret[prop] = new Date(parseInt(redisVal)).toString();
                     break;
             }
         }

@@ -1,6 +1,7 @@
 'use strict';
 
-const Redis = require('ioredis'),
+const expect = require('chai').expect,
+    Redis = require('ioredis'),
     RigidDB = require('../index');
 
 let redisClient = new Redis({
@@ -20,7 +21,9 @@ describe('Find', function() {
                         color: { type: 'string', allowNull: true },
                         mileage: 'int',
                         convertible: 'boolean',
-                        purchaseDate: 'date'
+                        purchaseDate: 'date',
+                        serviceDate: 'timestamp',
+                        extra: 'string'
                     },
                     indices: {
                         first: {
@@ -36,29 +39,47 @@ describe('Find', function() {
             });
         }).then(function() {
             return store.create('cars', {
-                color: 'blue',
+                color: null,
                 mileage: 12345,
                 convertible: true,
-                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),
+                serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),
+                extra: '~'
             });
         }).then(function() {
             return store.create('cars', {
                 color: 'blue',
                 mileage: 12345,
                 convertible: true,
-                purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)')
-            });
-        }).then(function() {
-            return store.create('cars', {
-                color: 'blue',
-                mileage: 12345,
-                convertible: true,
-                purchaseDate: new Date('Sun Nov 01 2015 23:41:24 GMT+0100 (CET)')
+                purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)'),
+                serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'),
+                extra: '~~~'
             });
         });
     });
 
     it('Prints collection', function() {
+        console.table = function(params) { // eslint-disable-line no-console
+            expect(params).to.deep.equal([
+                {
+                    color: '[NULL]',
+                    extra: '\"~\"',
+                    id: '1',
+                    mileage: 12345,
+                    purchaseDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)',
+                    serviceDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'
+                }, {
+                    color: '\"blue\"',
+                    extra: '\"~~~\"',
+                    id: '2',
+                    mileage: 12345,
+                    purchaseDate: 'Sun Nov 01 2015 22:41:24 GMT+0100 (CET)',
+                    serviceDate: 'Sun Nov 01 2015 17:41:24 GMT+0100 (CET)'
+                }
+            ]);
+        };
+
+
         return store.debugPrint('cars').then(function() {
         });
     });
