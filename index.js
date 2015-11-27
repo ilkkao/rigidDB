@@ -194,11 +194,28 @@ RigidDB.prototype._normalizeAndVerifySchema = function(schema) {
                 return { err: 'Invalid or missing index fields definition' };
             }
 
+            let normalizedIndexFields = [];
+
             for (let field of index.fields) {
-                if (fieldNames.indexOf(field) === -1) {
-                    return { err: `Invalid index field: '${field}'` };
+                if (typeof(field) === 'string') {
+                    field = { name: field, caseInsensitive: false };
                 }
+
+                if (fieldNames.indexOf(field.name) === -1) {
+                    return { err: `Invalid index field: '${field.name}'` };
+                }
+
+                for (let indexFieldProp of Object.keys(field)) {
+                    if (indexFieldProp !== 'name' && indexFieldProp !== 'caseInsensitive') {
+                        return { err: `Invalid index field property: '${indexFieldProp}'` };
+                    }
+                }
+
+                field.caseInsensitive = !!field.caseInsensitive;
+                normalizedIndexFields.push(field);
             }
+
+            index.fields = normalizedIndexFields;
         }
     }
 
@@ -431,18 +448,18 @@ RigidDB.prototype._list = function(ctx, collection) {
 RigidDB.prototype._find = function(ctx, collection, attrs) {
     let indices = this.schema[collection].indices;
     let searchFields = Object.keys(attrs).sort().join();
-    let indexFound = false;
+    let index = false;
 
     for (let indexName in indices) {
-        let index = indices[indexName];
+        let candidateIndex = indices[indexName];
 
-        if (index.fields.sort().join() === searchFields) {
-            indexFound = true;
+        if (candidateIndex.fields.map(field => field.name).sort().join() === searchFields) {
+            index = candidateIndex;
             break;
         }
     }
 
-    if (!indexFound) {
+    if (!index) {
         ctx.error = { method: 'find', err: 'unknownIndex' };
         return;
     }
@@ -456,9 +473,8 @@ RigidDB.prototype._find = function(ctx, collection, attrs) {
 
     this._addValuesVar(ctx, redisAttrs.val);
 
-    let fields = Object.keys(redisAttrs.val);
-    let name = this._indexName(collection, fields);
-    let prop = this._indexValues(fields);
+    let name = this._indexName(collection, index);
+    let prop = this._indexValues(index);
 
     genCode(ctx, `local result = redis.call('HGET', '${name}', ${prop})`);
     genCode(ctx, `if result ~= false then`);
@@ -480,8 +496,8 @@ RigidDB.prototype._genAllIndices = function(ctx, collection) {
 
         redisIndices.push({
             name: indexName,
-            redisKey: this._indexName(collection, index.fields),
-            redisValue: this._indexValues(index.fields),
+            redisKey: this._indexName(collection, index),
+            redisValue: this._indexValues(index),
             fields: index.fields,
             uniq: index.uniq
         });
@@ -490,13 +506,23 @@ RigidDB.prototype._genAllIndices = function(ctx, collection) {
     return redisIndices;
 };
 
-RigidDB.prototype._indexName = function(collection, fields) {
+RigidDB.prototype._indexName = function(collection, index) {
+    let fields = index.fields.map(field => field.name);
+
     return `${this.prefix}:${collection}:i:${fields.sort().join(':')}`;
 };
 
-RigidDB.prototype._indexValues = function(fields) {
-    // Lua gsub returns two values. Extra parenthesis are used to discard the second value.
-    return fields.sort().map(field => `(string.gsub(values["${field}"], ':', '::'))`).join(`..':'..`);
+RigidDB.prototype._indexValues = function(index) {
+    return index.fields.sort((a, b) => (a.name < b.name) ? -1 : ((a.name > b.name) ? 1 : 0)).map(field => {
+        let valueCode = `values["${field.name}"]`;
+
+        if (field.caseInsensitive) {
+            valueCode = `string.lower(${valueCode})`;
+        }
+
+        // Lua gsub returns two values. Extra parenthesis are used to discard the second value.
+        return `(string.gsub(${valueCode}, ':', '::'))`;
+    }).join(`..':'..`);
 };
 
 RigidDB.prototype._assertUniqIndicesFree = function(ctx, collection, indices, method) {
@@ -504,7 +530,7 @@ RigidDB.prototype._assertUniqIndicesFree = function(ctx, collection, indices, me
 
     for (let index of indices) {
         if (index.uniq) {
-            let notNullCheck = index.fields.map(field => `values["${field}"] ~= '~'`).join(' and ');
+            let notNullCheck = index.fields.map(field => `values["${field.name}"] ~= '~'`).join(' and ');
 
             genCode(ctx, `local currentIndex = redis.call('HGET', '${index.redisKey}', ${index.redisValue})`);
             genCode(ctx, `if currentIndex and currentIndex ~= id and ${notNullCheck} then`);

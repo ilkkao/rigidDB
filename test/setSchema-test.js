@@ -176,6 +176,26 @@ describe('SetSchema', function() {
         });
     });
 
+    it('Invalid field definition property definition', function() {
+        return store.setSchema(1, {
+            cars: {
+                definition: { color: 'string' },
+                indices: {
+                    first: {
+                        uniq: true,
+                        fields: [ { name: 'test', caseInSensitive: false } ]
+                    }
+                }
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                method: 'setSchema',
+                reason: 'Invalid index field: \'test\'',
+                val: false
+            });
+        });
+    });
+
     it('Valid parameters don\'t throw', function() {
         return store.setSchema(1, {
             cars: {
@@ -189,7 +209,7 @@ describe('SetSchema', function() {
                 indices: {
                     date: {
                         uniq: true,
-                        fields: [ 'purchaseDate' ]
+                        fields: [ { name: 'purchaseDate' } ]
                     },
                     details: {
                         uniq: false,

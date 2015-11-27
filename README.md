@@ -22,6 +22,7 @@ store.setSchema({
     cars: {
         definition: {
             color: { type: 'string', allowNull: true },
+            model: { type: 'string', allowNull: false },
             mileage: 'int', // A shortcut for { type: 'int', allowNull: false }
             convertible: 'boolean',
             purchaseDate: 'date'
@@ -29,11 +30,14 @@ store.setSchema({
         indices: {
             first: {
                 uniq: true,
-                fields: [ 'purchaseDate', 'mileage' ]
+                fields: [
+                    { name: 'model', caseInsensitive: true },
+                    { name: 'color', caseInsensitive: false }
+                ]
             },
             second: {
                 uniq: false,
-                fields: [ 'color', 'mileage' ]
+                fields: [ 'color' ] // A shortcut for { name: 'color', caseInsensitive: false }
             }
         }
     }

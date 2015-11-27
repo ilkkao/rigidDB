@@ -101,6 +101,80 @@ describe('Create', function() {
         });
     });
 
+    it('Succeeds if unique index value case differs', function() {
+        return store.create('car', {
+            color: 'blue',
+            mileage: 12345,
+            convertible: true,
+            purchaseDate: new Date('Sun Nov 01 2015 18:41:24 GMT+0100 (CET)')
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 1
+            });
+
+            return store.create('car', {
+                color: 'Blue',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            });
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 2
+            });
+        });
+    });
+
+    it('Fails if unique index value matches when caseInSensitive is true', function() {
+        store = new RigidDB('baz', { db: 15 });
+
+        return store.setSchema(1, {
+            car: {
+                definition: {
+                    color: { type: 'string', allowNull: true },
+                    mileage: { type: 'int', allowNull: false },
+                    convertible: 'boolean',
+                    purchaseDate: 'date'
+                },
+                indices: {
+                    third: {
+                        uniq: true,
+                        fields: [ 'mileage', { name: 'color', caseInsensitive: true } ]
+                    }
+                }
+            }
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: true
+            });
+
+            return store.create('car', {
+                color: 'white',
+                mileage: 12345,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
+            }).then(function(result) {
+                expect(result).to.deep.equal({
+                    val: 1
+                });
+
+                return store.create('car', {
+                    color: 'WHITE',
+                    mileage: 12345,
+                    convertible: true,
+                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+                });
+            }).then(function(result) {
+                expect(result).to.deep.equal({
+                    err: 'notUnique',
+                    indices: [ 'third' ],
+                    method: 'create',
+                    val: false
+                });
+            });
+        });
+    });
+
     it('Redis is updated correctly', function() {
         return store.create('car', {
             color: 'blue',
