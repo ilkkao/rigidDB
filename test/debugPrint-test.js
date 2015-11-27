@@ -10,7 +10,7 @@ let redisClient = new Redis({
 
 let store;
 
-describe('Find', function() {
+describe('DebugPrint', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
             store = new RigidDB('foo', { db: 15 });
@@ -65,14 +65,16 @@ describe('Find', function() {
                     color: '[NULL]',
                     extra: '\"~\"',
                     id: '1',
-                    mileage: 12345,
+                    mileage: '12345',
+                    convertible: 'true',
                     purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString(),
                     serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
                 }, {
                     color: '\"blue\"',
                     extra: '\"~~~\"',
                     id: '2',
-                    mileage: 12345,
+                    mileage: '12345',
+                    convertible: 'true',
                     purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)').toString(),
                     serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
                 }

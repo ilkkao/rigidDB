@@ -170,7 +170,7 @@ describe('SetSchema', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid index field: \'mileage\'',
+                reason: 'Invalid index field name: \'mileage\'',
                 val: false
             });
         });

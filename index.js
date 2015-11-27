@@ -103,7 +103,7 @@ RigidDB.prototype.debugPrint = function(collection) {
     return this.client.zrange(`${this.prefix}:${collection}:ids`, 0, -1).then(ids =>
         ids.reduce((sequence, id) => sequence.then(() =>
             this.client.hgetall(`${this.prefix}:${collection}:${id}`).then(result => {
-                result = this._denormalizeAttrsForPrinting(collection, result);
+                result = this._processRedisAttrsForPrinting(collection, result);
                 result.id = id;
                 data.push(result);
             })), Promise.resolve())).then(() => {
@@ -202,7 +202,7 @@ RigidDB.prototype._normalizeAndVerifySchema = function(schema) {
                 }
 
                 if (fieldNames.indexOf(field.name) === -1) {
-                    return { err: `Invalid index field: '${field.name}'` };
+                    return { err: `Invalid index field name: '${field.name}'` };
                 }
 
                 for (let indexFieldProp of Object.keys(field)) {
@@ -317,7 +317,7 @@ RigidDB.prototype._exec = function(ctx) {
         }
 
         if (method === 'get') {
-            val = this._denormalizeAttrs(ret[3], val);
+            val = this._processRedisGetReturnValue(ret[3], val);
         } else if (method === 'exists') {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
         } else if (method === 'list' || method === 'find') {
@@ -341,7 +341,7 @@ RigidDB.prototype._whenSchemaLoaded = function(cb) {
 };
 
 RigidDB.prototype._create = function(ctx, collection, attrs) {
-    let redisAttrs = this._normalizeAttrs(collection, attrs);
+    let redisAttrs = this._normalizeRedisAttrs(collection, attrs);
 
     if (redisAttrs.err) {
         ctx.error = { method: 'create', err: redisAttrs.err };
@@ -367,7 +367,7 @@ RigidDB.prototype._create = function(ctx, collection, attrs) {
 };
 
 RigidDB.prototype._update = function(ctx, collection, id, attrs) {
-    let redisAttrs = this._normalizeAttrs(collection, attrs);
+    let redisAttrs = this._normalizeRedisAttrs(collection, attrs);
 
     if (redisAttrs.err) {
         ctx.error = { method: 'update', err: redisAttrs.err };
@@ -464,7 +464,7 @@ RigidDB.prototype._find = function(ctx, collection, attrs) {
         return;
     }
 
-    let redisAttrs = this._normalizeAttrs(collection, attrs);
+    let redisAttrs = this._normalizeRedisAttrs(collection, attrs);
 
     if (redisAttrs.err) {
         ctx.error = { method: 'find', err: redisAttrs.err };
@@ -507,13 +507,15 @@ RigidDB.prototype._genAllIndices = function(ctx, collection) {
 };
 
 RigidDB.prototype._indexName = function(collection, index) {
-    let fields = index.fields.map(field => field.name);
+    let fields = index.fields.map(field => field.name).sort().join(':');
 
-    return `${this.prefix}:${collection}:i:${fields.sort().join(':')}`;
+    return `${this.prefix}:${collection}:i:${fields}`;
 };
 
 RigidDB.prototype._indexValues = function(index) {
-    return index.fields.sort((a, b) => (a.name < b.name) ? -1 : ((a.name > b.name) ? 1 : 0)).map(field => {
+    let compareFunc = (a, b) => (a.name < b.name) ? -1 : ((a.name > b.name) ? 1 : 0);
+
+    return index.fields.sort(compareFunc).map(field => {
         let valueCode = `values["${field.name}"]`;
 
         if (field.caseInsensitive) {
@@ -593,27 +595,57 @@ RigidDB.prototype._addValuesVar = function(ctx, attrs) {
     genCode(ctx, `}`);
 };
 
-RigidDB.prototype._normalizeAttrs = function(collection, attrs) {
+RigidDB.prototype._processRedisGetReturnValue = function(collection, redisRetVal) {
+    let redisObject = {};
+
+    while (redisRetVal.length > 0) {
+        let prop = redisRetVal.shift();
+        redisObject[prop] = redisRetVal.shift();
+    }
+
+    return this._deNormalizeRedisAttrs(collection, redisObject);
+};
+
+RigidDB.prototype._processRedisAttrsForPrinting = function(collection, redisObject) {
+    redisObject = this._deNormalizeRedisAttrs(collection, redisObject);
+
+    for (let prop in redisObject) {
+        let redisVal = redisObject[prop];
+        let propType = this.schema[collection].definition[prop].type;
+
+        if (redisVal === null) {
+            redisObject[prop] = '[NULL]';
+        } else if (propType === 'string') {
+            redisObject[prop] = `"${redisVal}"`;
+        } else {
+            redisObject[prop] = redisVal.toString();
+        }
+    }
+
+    return redisObject;
+};
+
+RigidDB.prototype._normalizeRedisAttrs = function(collection, attrs) {
     let redisAttrs = {};
-    let definition = this.schema[collection].definition;
+    let schema = this.schema[collection].definition;
 
     for (let prop in attrs) {
-        let propType = definition[prop];
+        let definition = schema[prop];
         let propVal = attrs[prop];
         let redisVal;
 
-        if (!propType) {
+        if (!definition) {
             continue;
         }
 
         if (propVal === null) {
-            if (!propType.allowNull) {
+            if (!definition.allowNull) {
                 return { err: `nullNotAllowed` };
             }
 
             redisVal = '~';
         } else {
-            switch (propType.type) {
+            switch (definition.type) {
                 case 'boolean':
                     redisVal = propVal ? 'true' : 'false';
                     break;
@@ -641,76 +673,37 @@ RigidDB.prototype._normalizeAttrs = function(collection, attrs) {
     return { val: redisAttrs };
 };
 
-RigidDB.prototype._denormalizeAttrs = function(collection, redisRetVal) {
-    let ret = {};
-
-    while (redisRetVal.length > 0) {
-        let prop = redisRetVal.shift();
-        let redisVal = redisRetVal.shift();
-        let propType = this.schema[collection].definition[prop];
-
-        if (redisVal === '~') {
-            ret[prop] = null;
-        } else {
-            switch (propType.type) {
-                case 'boolean':
-                    redisVal = redisVal === 'true';
-                    break;
-                case 'int':
-                    redisVal = parseInt(redisVal);
-                    break;
-                case 'string':
-                    if (/^~+$/.test(redisVal)) {
-                        redisVal = redisVal.substring(1);
-                    }
-                    break;
-                case 'date':
-                    redisVal = new Date(redisVal);
-                    break;
-                case 'timestamp':
-                    redisVal = new Date(parseInt(redisVal));
-                    break;
-            }
-
-            ret[prop] = redisVal;
-        }
-    }
-
-    return ret;
-};
-
-RigidDB.prototype._denormalizeAttrsForPrinting = function(collection, redisObject) {
-    let ret = {};
-
-    for (let prop of Object.keys(redisObject)) {
+RigidDB.prototype._deNormalizeRedisAttrs = function(collection, redisObject) {
+    for (let prop in redisObject) {
         let redisVal = redisObject[prop];
-        let propType = this.schema[collection].definition[prop];
+        let propType = this.schema[collection].definition[prop].type;
 
         if (redisVal === '~') {
-            ret[prop] = '[NULL]';
+            redisObject[prop] = null;
         } else {
-            switch (propType.type) {
+            switch (propType) {
+                case 'boolean':
+                    redisObject[prop] = redisObject[prop] === 'true';
+                    break;
                 case 'int':
-                    ret[prop] = parseInt(redisVal);
+                    redisObject[prop] = parseInt(redisVal);
                     break;
                 case 'string':
                     if (/^~+$/.test(redisVal)) {
-                        redisVal = redisVal.substring(1);
+                        redisObject[prop] = redisObject[prop].substring(1);
                     }
-
-                    ret[prop] = `"${redisVal}"`;
                     break;
                 case 'date':
-                    ret[prop] = new Date(redisVal).toString();
+                    redisObject[prop] = new Date(redisObject[prop]);
                     break;
                 case 'timestamp':
-                    ret[prop] = new Date(parseInt(redisVal)).toString();
+                    redisObject[prop] = new Date(parseInt(redisObject[prop]));
                     break;
             }
         }
     }
 
-    return ret;
+    return redisObject;
 };
 
 function newContext() {
