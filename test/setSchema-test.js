@@ -183,14 +183,14 @@ describe('SetSchema', function() {
                 indices: {
                     first: {
                         uniq: true,
-                        fields: [ { name: 'test', caseInSensitive: false } ]
+                        fields: [ { name: 'color', caseInSensitive: false } ]
                     }
                 }
             }
         }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid index field: \'test\'',
+                reason: 'Invalid index field property: \'caseInSensitive\'',
                 val: false
             });
         });
