@@ -60,35 +60,149 @@ store.setSchema({
 });
 ```
 
-## API
+## Connection API
 
-### new RigidDB(options, redisOptions)
+### new RigidDB(databaseName, redisOptions)
 
-### setSchema(schemaDefinition)
+Create a new database connection.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| dataBaseName | New or existing database name. All Redis keys will be prefixed with the name. |
+| redisOptions | An object containing arguments forwarded to `ioredis` node module. Supported properties are: `host`, `port`, `password`, and `db`. |
+
+## Database API
+
+#### Return values
+
+All database API methods return an JavaScript object. In success case the object contains `method` (method name) and `val` (actual return value) properties.
+
+In case of an error, the object contains `method` (method name) and `err` (error code, string) properties.
+
+As an example, `delete` method can return:
+
+```
+{
+    method: 'delete',
+    err: 'notFound',
+}
+```
+
+TODO: list all error codes.
+
+### setSchema(revision, schemaDefinition)
+
+Set a schema for the database. Schema can be set once. Future versions of this library will allow schema changes and data migration. Validity of a schema is checked before it is activated and persisted. Any other API call is possible only after the schema is set.
+
+| Argument         | Description                                                   |
+|------------------|---------------------------------------------------------------|
+| revision         | Revision number of the schema, integer. |
+| schemaDefinition | An object that specifies the collections, including the format of collection data. See the example above for supported data type and index definitions. |
 
 ### getSchema()
 
+Get the previously set schema definition.
+
 ### create(collection, attributes)
+
+Add a new object to collection.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| attributes   | An object that includes values for all attributes listed in the schema. |
+
+##### Return value
+
+Id of the newly created object, integer.
 
 ### update(collection, id, attributes)
 
+Update an existing object in collection.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| id           | Id of the object to be updated.
+| attributes   | An object that includes values for attributes to be updated. |
+
 ### delete(collection, id)
+
+Remove an object from collection.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| id           | Id of the object to be removed.
 
 ### get(collection, id)
 
+Get an object from collection
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| id           | Id of the object to be fetched.
+
 ### exists(collection, id)
+
+Check if an object with an id exists
+
+Get an object from collection
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| id           | Id of the object to be searched.
 
 ### list(collection)
 
+Get ids of all object in a collection.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+
 ### size(collection)
+
+Get the amount of objects in a collection.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
 
 ### multi(transaction)
 
+Execute several API methods in an atomic transaction. Note that the return value of a method call inside the transaction function can't be used as an argument in the following method calls.
+
+Transaction is terminated if any of the methods return an error value. In a typical case transaction contains one or more exists() calls to make sure that the some object still exists before creating an object that points to those objects.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| transaction  | Transaction function. |
+
 ### find(collection, searchAttributes)
+
+Find an object using one of the specified indices.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| searchAttributes | An object that includes values to be searched. |
 
 ### debugPrint(collection)
 
+Print the contents of a collection.
+
+Only usable with smalle collections during development.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+
 ### quit()
+
+Terminate the database connection.
 
 ## Supported data types
 
