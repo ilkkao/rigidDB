@@ -21,7 +21,7 @@ describe('Create', function() {
                         color: { type: 'string', allowNull: true },
                         mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
-                        purchaseDate: 'timestamp',
+                        purchaseDate: 'timestamp'
                     },
                     indices: {
                         first: {
