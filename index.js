@@ -662,7 +662,8 @@ RigidDB.prototype._normalizeRedisAttrs = function(collection, attrs) {
                     redisVal = propVal.toString();
                     break;
                 case 'timestamp':
-                    redisVal = propVal.getTime().toString();
+                    redisVal = typeof(propVal.getTime) === 'function' ?
+                        propVal.getTime().toString() : 'invalid';
                     break;
             }
         }

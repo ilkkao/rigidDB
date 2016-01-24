@@ -21,7 +21,7 @@ describe('Create', function() {
                         color: { type: 'string', allowNull: true },
                         mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
-                        purchaseDate: 'date'
+                        purchaseDate: 'timestamp',
                     },
                     indices: {
                         first: {
@@ -192,7 +192,7 @@ describe('Create', function() {
                 color: 'blue',
                 mileage: '12345',
                 convertible: 'true',
-                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').toString()
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').getTime().toString()
             });
 
             return redisClient.zrange('foo:car:ids', 0, -1);
@@ -206,7 +206,7 @@ describe('Create', function() {
             return redisClient.hgetall('foo:car:i:purchaseDate');
         }).then(function(result) {
             let dateResult = {};
-            dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').toString().replace(/:/g, '::')] = '1';
+            dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').getTime().toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
             return redisClient.hget('foo:car:i:color:convertible:mileage', 'blue:true:12345');
@@ -354,6 +354,30 @@ describe('Create', function() {
                 method: 'create',
                 err: 'nullNotAllowed',
                 val: false
+            });
+        });
+    });
+
+    it('Handles invalid date correctly', function() {
+        return store.create('car', {
+            color: 'blue',
+            mileage: 1234,
+            convertible: true,
+            purchaseDate: 'just a string'
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: 1
+            });
+
+            return store.get('car', 1);
+        }).then(function(result) {
+            expect(result).to.deep.equal({
+                val: {
+                    color: 'blue',
+                    convertible: true,
+                    mileage: 1234,
+                    purchaseDate: new Date('invalid')
+                }
             });
         });
     });
