@@ -19,7 +19,7 @@ describe('Find', function() {
                 car: {
                     definition: {
                         color: { type: 'string', allowNull: true },
-                        mileage: 'int',
+                        mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },

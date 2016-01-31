@@ -167,7 +167,9 @@ RigidDB.prototype._normalizeAndVerifySchema = function(schema) {
             }
 
             if (typeof(definition[fieldName]) === 'string') {
-                definition[fieldName] = { type: definition[fieldName] };
+                definition[fieldName] = { type: definition[fieldName], allowNull: true };
+            } else if (definition[fieldName].allowNull === undefined) {
+                definition[fieldName].allowNull = true;
             }
 
             let type = definition[fieldName];

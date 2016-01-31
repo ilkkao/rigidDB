@@ -23,7 +23,7 @@ store.setSchema({
         definition: {
             color: { type: 'string', allowNull: true },
             model: { type: 'string', allowNull: false },
-            mileage: 'int', // A shortcut for { type: 'int', allowNull: false }
+            mileage: 'int', // A shortcut for { type: 'int', allowNull: true }
             convertible: 'boolean',
             purchaseDate: 'date'
         },
@@ -75,7 +75,9 @@ Create a new database connection.
 
 #### Return values
 
-All database API methods return an JavaScript object. In success case the object contains `method` (method name) and `val` (actual return value) properties.
+All database API methods return an JavaScript object.
+
+In success case the object contains `method` (method name) and `val` (actual return value) properties.
 
 In case of an error, the object contains `method` (method name) and `err` (error code, string) properties.
 
