@@ -96,7 +96,7 @@ describe('Update', function() {
             purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: true
+                val: 0
             });
         });
     });
@@ -105,12 +105,12 @@ describe('Update', function() {
         return store.update('car', id, {
             color: 'red',
             mileage: 4242,
-            convertible: false,
+            convertible: true,
             purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)'),
             foobar: new Date(NaN) // Properties not in schema are ignored
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: true
+                val: 3
             });
 
             return redisClient.hgetall('foo:car:1');
@@ -118,7 +118,7 @@ describe('Update', function() {
             expect(result).to.deep.equal({
                 color: 'red',
                 mileage: '4242',
-                convertible: 'false',
+                convertible: 'true',
                 purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString()
             });
 
@@ -136,7 +136,7 @@ describe('Update', function() {
             dateResult[new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.hget('foo:car:i:color:convertible:mileage', 'red:false:4242');
+            return redisClient.hget('foo:car:i:color:convertible:mileage', 'red:true:4242');
         }).then(function(result) {
             expect(result).to.deep.equal(id.toString());
 
@@ -169,7 +169,7 @@ describe('Update', function() {
             purchaseDate: null
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: true
+                val: 4
             });
         });
     });

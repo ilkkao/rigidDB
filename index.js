@@ -324,7 +324,7 @@ RigidDB.prototype._exec = function(ctx) {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
         } else if (method === 'list' || method === 'find') {
             val = val.map(item => parseInt(item));
-        } else if (method === 'update' || method === 'delete' || method === 'none') {
+        } else if (method === 'delete' || method === 'none') {
             val = true;
         }
 
@@ -382,8 +382,10 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'update', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
+    genCode(ctx, `local chg = 0`);
 
     for (let prop in redisAttrs.val) {
+        genCode(ctx, `if values['${prop}'] ~= ARGV[${ctx.paramCounter}] then chg = chg + 1 end`);
         genCode(ctx, `values['${prop}'] = ARGV[${ctx.paramCounter++}]`);
         pushParams(ctx, redisAttrs.val[prop]);
     }
@@ -402,7 +404,7 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     this._addIndices(ctx, collection, 'update');
 
     genCode(ctx, `hmset(key, values)`);
-    genCode(ctx, `ret = { 'update', 'noError', true }`);
+    genCode(ctx, `ret = { 'update', 'noError', chg }`);
 };
 
 RigidDB.prototype._delete = function(ctx, collection, id) {
