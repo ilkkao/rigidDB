@@ -88,6 +88,10 @@ RigidDB.prototype.size = function(collection) {
     return this._execSingle(this._size, 'size', collection);
 };
 
+RigidDB.prototype.currentId = function(collection) {
+    return this._execSingle(this._currentId, 'currentId', collection);
+};
+
 RigidDB.prototype.multi = function(cb) {
     return this._whenSchemaLoaded(() => this._execMultiNow(cb));
 };
@@ -322,6 +326,8 @@ RigidDB.prototype._exec = function(ctx) {
             val = this._processRedisGetReturnValue(ret[3], val);
         } else if (method === 'exists') {
             val = !!val; // Lua returns 0 (not found) or 1 (found)
+        } else if (method === 'currentId') {
+            val = parseInt(val);
         } else if (method === 'list' || method === 'find') {
             val = val.map(item => parseInt(item));
         } else if (method === 'delete' || method === 'none') {
@@ -442,6 +448,11 @@ RigidDB.prototype._size = function(ctx, collection) {
     genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'size', 'noError', 0 } end`);
     genCode(ctx, `ret = { 'size', 'noError', redis.call('ZCARD', key) }`);
+};
+
+RigidDB.prototype._currentId = function(ctx, collection) {
+    genCode(ctx, `local key = '${this.prefix}:${collection}:nextid'`);
+    genCode(ctx, `ret = { 'currentId', 'noError', redis.call('GET', key) or 0 }`);
 };
 
 RigidDB.prototype._list = function(ctx, collection) {
