@@ -660,25 +660,29 @@ RigidDB.prototype._normalizeRedisAttrs = function(collection, attrs) {
 
             redisVal = '~';
         } else {
+            if ((definition.type === 'boolean' && typeof(propVal) !== 'boolean') ||
+                (definition.type === 'int' && !Number.isFinite(propVal)) ||
+                (definition.type === 'string' && typeof(propVal) !== 'string') ||
+                (definition.type === 'date' && !(propVal instanceof Date)) ||
+                (definition.type === 'timestamp' && !(propVal instanceof Date))) {
+                return { err: 'wrongType' };
+            }
+
             switch (definition.type) {
                 case 'boolean':
                     redisVal = propVal ? 'true' : 'false';
                     break;
                 case 'int':
-                    redisVal = parseInt(propVal).toString();
+                    redisVal = propVal.toString();
                     break;
                 case 'string':
-                    redisVal = String(propVal);
-                    if (/^~+$/.test(redisVal)) {
-                        redisVal = `~${redisVal}`;
-                    }
+                    redisVal = (/^~+$/.test(propVal)) ? `~${propVal}` : propVal;
                     break;
                 case 'date':
                     redisVal = propVal.toString();
                     break;
                 case 'timestamp':
-                    redisVal = typeof(propVal.getTime) === 'function' ?
-                        propVal.getTime().toString() : 'invalid';
+                    redisVal = propVal.getTime().toString();
                     break;
             }
         }

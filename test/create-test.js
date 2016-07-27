@@ -366,18 +366,9 @@ describe('Create', function() {
             purchaseDate: 'just a string'
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: 1
-            });
-
-            return store.get('car', 1);
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: {
-                    color: 'blue',
-                    convertible: true,
-                    mileage: 1234,
-                    purchaseDate: new Date('invalid')
-                }
+                method: 'create',
+                err: 'wrongType',
+                val: false
             });
         });
     });

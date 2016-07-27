@@ -208,8 +208,8 @@ Terminate the database connection.
 
 ## Supported data types
 
-- Boolean
-- Integer
-- String
-- Date
-- Unix timestamp
+- Boolean ('boolean')
+- Integer and float ('int')
+- String ('string')
+- Date ('date')
+- Unix timestamp ('timestamp')

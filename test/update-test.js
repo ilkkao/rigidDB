@@ -164,7 +164,7 @@ describe('Update', function() {
     it('Succeeds if null attribute is allowed', function() {
         return store.update('car', id, {
             color: 'red',
-            mileage: '1234',
+            mileage: 1.3,
             convertible: false,
             purchaseDate: null
         }).then(function(result) {
