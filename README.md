@@ -16,7 +16,7 @@ Node.js v4.0.0 or later required.
 ```javascript
 const RigidDB = require('rigiddb');
 
-let store = new RigidDB('mydb');
+let store = new RigidDB('mydb', 42);
 
 store.setSchema({
     cars: {
@@ -62,13 +62,14 @@ store.setSchema({
 
 ## Connection API
 
-### new RigidDB(databaseName, redisOptions)
+### new RigidDB(databaseName, revision, redisOptions)
 
 Create a new database connection.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
 | dataBaseName | New or existing database name. All Redis keys will be prefixed with the name. |
+| revision     | Revision number of the schema, integer. |
 | redisOptions | An object containing arguments forwarded to `ioredis` node module. Supported properties are: `host`, `port`, `password`, and `db`. |
 
 ## Database API
@@ -92,13 +93,12 @@ As an example, `delete` method can return:
 
 TODO: list all error codes.
 
-### setSchema(revision, schemaDefinition)
+### setSchema(schemaDefinition)
 
-Set a schema for the database. Schema can be set once. Future versions of this library will allow schema changes and data migration. Validity of a schema is checked before it is activated and persisted. Any other API call is possible only after the schema is set.
+Set a schema for the database. Schema can be set once. Future versions of this library will support schema changes and data migration. Validity of a schema is checked before it is activated and persisted. Any other API call is possible only after the schema is set.
 
 | Argument         | Description                                                   |
 |------------------|---------------------------------------------------------------|
-| revision         | Revision number of the schema, integer. |
 | schemaDefinition | An object that specifies the collections, including the format of collection data. See the example above for supported data type and index definitions. |
 
 ### getSchema()
