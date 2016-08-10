@@ -13,9 +13,9 @@ let store;
 describe('DebugPrint', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new RigidDB('foo', { db: 15 });
+            store = new RigidDB('foo', 42, { db: 15 });
 
-            return store.setSchema(1, {
+            return store.setSchema({
                 cars: {
                     definition: {
                         color: { type: 'string', allowNull: true },

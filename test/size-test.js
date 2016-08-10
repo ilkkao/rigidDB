@@ -12,10 +12,10 @@ let store;
 
 describe('Size', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema(1, {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',

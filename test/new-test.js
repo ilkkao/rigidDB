@@ -21,11 +21,23 @@ describe('Constructor', function() {
         }).to.throw('Invalid prefix.');
     });
 
+    it('Missing revision parameter throws', function() {
+        expect(function() {
+            new RigidDB('mas');
+        }).to.throw('Invalid revision.');
+    });
+
+    it('Invalid revision parameter throws', function() {
+        expect(function() {
+            new RigidDB('mas', 1.2);
+        }).to.throw('Invalid revision.');
+    });
+
     it('Invalid existing schema causes error', function() {
         return redisClient.flushdb().then(function() {
-            return redisClient.set('foo:_schema', 'whatwhat');
+            return redisClient.set('foo-42:_schema', 'whatwhat');
         }).then(function() {
-            let store = new RigidDB('foo', {
+            let store = new RigidDB('foo', 42, {
                 db: 15
             });
 
@@ -41,9 +53,9 @@ describe('Constructor', function() {
 
     it('Invalid existing schema causes error', function() {
         return redisClient.flushdb().then(function() {
-            return redisClient.set('foo:_schema', '{ "cars": {} }');
+            return redisClient.set('foo-42:_schema', '{ "cars": {} }');
         }).then(function() {
-            let store = new RigidDB('foo', {
+            let store = new RigidDB('foo', 42, {
                 db: 15
             });
 
@@ -59,9 +71,9 @@ describe('Constructor', function() {
 
     it('Invalid existing schema causes error for multi', function() {
         return redisClient.flushdb().then(function() {
-            return redisClient.set('foo:_schema', '{ "cars": {} }');
+            return redisClient.set('foo-42:_schema', '{ "cars": {} }');
         }).then(function() {
-            let store = new RigidDB('foo', {
+            let store = new RigidDB('foo', 42, {
                 db: 15
             });
 

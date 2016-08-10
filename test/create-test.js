@@ -12,10 +12,12 @@ let store;
 
 describe('Create', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema(1, {
+            return redisClient.script('flush');
+        }).then(function() {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: { type: 'string', allowNull: true },
@@ -126,9 +128,9 @@ describe('Create', function() {
     });
 
     it('Fails if unique index value matches when caseInSensitive is true', function() {
-        store = new RigidDB('baz', { db: 15 });
+        store = new RigidDB('baz', 42, { db: 15 });
 
-        return store.setSchema(1, {
+        return store.setSchema({
             car: {
                 definition: {
                     color: { type: 'string', allowNull: true },
@@ -186,7 +188,7 @@ describe('Create', function() {
                 val: 1
             });
 
-            return redisClient.hgetall('foo:car:1');
+            return redisClient.hgetall('foo-42:car:1');
         }).then(function(result) {
             expect(result).to.deep.equal({
                 color: 'blue',
@@ -195,34 +197,34 @@ describe('Create', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').getTime().toString()
             });
 
-            return redisClient.zrange('foo:car:ids', 0, -1);
+            return redisClient.zrange('foo-42:car:ids', 0, -1);
         }).then(function(result) {
             expect(result).to.deep.equal([ '1' ]);
 
-            return redisClient.get('foo:car:nextid');
+            return redisClient.get('foo-42:car:nextid');
         }).then(function(result) {
             expect(result).to.equal('1');
 
-            return redisClient.hgetall('foo:car:i:purchaseDate');
+            return redisClient.hgetall('foo-42:car:i:purchaseDate');
         }).then(function(result) {
             let dateResult = {};
             dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').getTime().toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.hget('foo:car:i:color:convertible:mileage', 'blue:true:12345');
+            return redisClient.hget('foo-42:car:i:color:convertible:mileage', 'blue:true:12345');
         }).then(function(result) {
             expect(result).to.deep.equal('1');
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(8);
+            expect(result).to.have.length(7);
         });
     });
 
     it('Redis is updated correctly when indices change from hash to set', function() {
-        store = new RigidDB('bar', { db: 15 });
+        store = new RigidDB('bar', 42, { db: 15 });
 
-        return store.setSchema(1, {
+        return store.setSchema({
             car: {
                 definition: {
                     color: { type: 'string', allowNull: true },
@@ -249,11 +251,11 @@ describe('Create', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
             });
         }).then(function() {
-            return redisClient.hgetall('bar:car:i:mileage');
+            return redisClient.hgetall('bar-42:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({ '12345': '1' });
 
-            return redisClient.smembers('bar:car:i:mileage:12345');
+            return redisClient.smembers('bar-42:car:i:mileage:12345');
         }).then(function(result) {
             expect(result).to.deep.equal([]);
 
@@ -264,11 +266,11 @@ describe('Create', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 18:41:24 GMT+0000 (UTC)')
             });
         }).then(function() {
-            return redisClient.hgetall('bar:car:i:mileage');
+            return redisClient.hgetall('bar-42:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({});
 
-            return redisClient.smembers('bar:car:i:mileage:12345');
+            return redisClient.smembers('bar-42:car:i:mileage:12345');
         }).then(function(result) {
             expect(result).to.deep.equal([ '1', '2' ]);
 
@@ -279,11 +281,11 @@ describe('Create', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 19:41:24 GMT+0000 (UTC)')
             });
         }).then(function() {
-            return redisClient.hgetall('bar:car:i:mileage');
+            return redisClient.hgetall('bar-42:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({});
 
-            return redisClient.smembers('bar:car:i:mileage:12345');
+            return redisClient.smembers('bar-42:car:i:mileage:12345');
         }).then(function(result) {
             expect(result).to.deep.equal([ '1', '2', '3' ]);
 
@@ -291,28 +293,28 @@ describe('Create', function() {
         }).then(function() {
             return store.delete('car', 1);
         }).then(function() {
-            return redisClient.hgetall('bar:car:i:mileage');
+            return redisClient.hgetall('bar-42:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({ '12345': '2' });
 
-            return redisClient.smembers('bar:car:i:mileage:12345');
+            return redisClient.smembers('bar-42:car:i:mileage:12345');
         }).then(function(result) {
             expect(result).to.deep.equal([]);
 
             return store.delete('car', 2);
         }).then(function() {
-            return redisClient.hgetall('bar:car:i:mileage');
+            return redisClient.hgetall('bar-42:car:i:mileage');
         }).then(function(result) {
             expect(result).to.deep.equal({});
 
-            return redisClient.smembers('bar:car:i:mileage:12345');
+            return redisClient.smembers('bar-42:car:i:mileage:12345');
         }).then(function(result) {
             expect(result).to.deep.equal([]);
         });
     });
 
     it('Succeeds if the schema is set earlier', function() {
-        let secondStore = new RigidDB('foo', { db: 15 });
+        let secondStore = new RigidDB('foo', 42, { db: 15 });
 
         return secondStore.create('car', {
             color: 'white',
@@ -327,7 +329,7 @@ describe('Create', function() {
     });
 
     it('Fails if the schema is not set', function() {
-        let secondStore = new RigidDB('baz', { db: 15 });
+        let secondStore = new RigidDB('baz', 42, { db: 15 });
 
         return secondStore.create('car', {
             color: 'white',

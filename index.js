@@ -7,12 +7,17 @@ const debug = require('debug')('code'),
 
 require('console.table');
 
-function RigidDB(prefix, redisOpts) {
+function RigidDB(prefix, revision, redisOpts) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
     }
 
+    if (!Number.isInteger(revision)) {
+        throw('Invalid revision.');
+    }
+
     this.prefix = prefix;
+    this.revision = revision;
     this.schemaLoading = true;
     this.invalidSavedSchema = false;
     this.schema = null;
@@ -26,7 +31,7 @@ function RigidDB(prefix, redisOpts) {
         db: redisOpts.db
     });
 
-    this.schemaPromise = this.client.get(`${prefix}:_schema`).then(result => {
+    this.schemaPromise = this.client.get(`${this._keyPrefix}:_schema`).then(result => {
         this.schemaLoading = false;
 
         if (result) {
@@ -52,8 +57,8 @@ RigidDB.prototype.quit = function() {
     return this.client.quit();
 };
 
-RigidDB.prototype.setSchema = function(revision, schema) {
-    return this._whenSchemaLoaded(() => this._setSchema(revision, schema));
+RigidDB.prototype.setSchema = function(schema) {
+    return this._whenSchemaLoaded(() => this._setSchema(schema));
 };
 
 RigidDB.prototype.getSchema = function() {
@@ -104,9 +109,9 @@ RigidDB.prototype.find = function(collection, searchAttrs) {
 RigidDB.prototype.debugPrint = function(collection) {
     let data = [];
 
-    return this.client.zrange(`${this.prefix}:${collection}:ids`, 0, -1).then(ids =>
+    return this.client.zrange(`${this._keyPrefix}:${collection}:ids`, 0, -1).then(ids =>
         ids.reduce((sequence, id) => sequence.then(() =>
-            this.client.hgetall(`${this.prefix}:${collection}:${id}`).then(result => {
+            this.client.hgetall(`${this._keyPrefix}:${collection}:${id}`).then(result => {
                 result = this._processRedisAttrsForPrinting(collection, result);
                 result.id = id;
                 data.push(result);
@@ -115,7 +120,7 @@ RigidDB.prototype.debugPrint = function(collection) {
             });
 };
 
-RigidDB.prototype._setSchema = function(revision, schema) {
+RigidDB.prototype._setSchema = function(schema) {
     let srcSchemaJSON = '';
 
     if (this.schema) {
@@ -137,8 +142,7 @@ RigidDB.prototype._setSchema = function(revision, schema) {
     this.srcSchema = schema;
     this.schema = ret.schema;
 
-    return this.client.set(`${this.prefix}:_schema`, srcSchemaJSON)
-        .then(() => this.client.set(`${this.prefix}:_schemaRevision`, revision))
+    return this.client.set(`${this._keyPrefix}:_schema`, srcSchemaJSON)
         .then(() => ({ val: true }));
 };
 
@@ -362,14 +366,14 @@ RigidDB.prototype._create = function(ctx, collection, attrs) {
         return;
     }
 
-    genCode(ctx, `local id = redis.call('INCR', '${this.prefix}:${collection}:nextid')`);
-    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
+    genCode(ctx, `local id = redis.call('INCR', '${this._keyPrefix}:${collection}:nextid')`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:' .. id`);
     this._addValuesVar(ctx, redisAttrs.val);
 
     this._addIndices(ctx, collection, 'create');
 
     genCode(ctx, `hmset(key, values)`);
-    genCode(ctx, `redis.call('ZADD', '${this.prefix}:${collection}:ids', id, id)`);
+    genCode(ctx, `redis.call('ZADD', '${this._keyPrefix}:${collection}:ids', id, id)`);
 
     genCode(ctx, `ret = { 'create', 'noError', id }`);
 };
@@ -385,7 +389,7 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
     pushParams(ctx, id);
 
-    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:' .. id`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'update', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
     genCode(ctx, `local chg = 0`);
@@ -415,13 +419,13 @@ RigidDB.prototype._update = function(ctx, collection, id, attrs) {
 
 RigidDB.prototype._delete = function(ctx, collection, id) {
     genCode(ctx, `local id = ARGV[${ctx.paramCounter++}]`);
-    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. id`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:' .. id`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'delete', 'notFound' } end`);
     genCode(ctx, `local values = hgetall(key)`);
 
     this._removeIndices(ctx, collection, 'delete');
 
-    genCode(ctx, `redis.call('ZREM', '${this.prefix}:${collection}:ids', id)`);
+    genCode(ctx, `redis.call('ZREM', '${this._keyPrefix}:${collection}:ids', id)`);
     genCode(ctx, `redis.call('DEL', key)`);
     genCode(ctx, `ret = { 'delete', 'noError' }`);
 
@@ -429,7 +433,7 @@ RigidDB.prototype._delete = function(ctx, collection, id) {
 };
 
 RigidDB.prototype._get = function(ctx, collection, id) {
-    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'get', 'notFound' } end`);
     genCode(ctx, `ret = { 'get', 'noError', redis.call('HGETALL', key), '${collection}' }`);
 
@@ -437,7 +441,7 @@ RigidDB.prototype._get = function(ctx, collection, id) {
 };
 
 RigidDB.prototype._exists = function(ctx, collection, id) {
-    genCode(ctx, `local key = '${this.prefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:' .. ARGV[${ctx.paramCounter++}]`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'exists', 'noError', 0 } end`);
     genCode(ctx, `ret = { 'exists', 'noError', 1 }`);
 
@@ -445,18 +449,18 @@ RigidDB.prototype._exists = function(ctx, collection, id) {
 };
 
 RigidDB.prototype._size = function(ctx, collection) {
-    genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:ids'`);
     genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'size', 'noError', 0 } end`);
     genCode(ctx, `ret = { 'size', 'noError', redis.call('ZCARD', key) }`);
 };
 
 RigidDB.prototype._currentId = function(ctx, collection) {
-    genCode(ctx, `local key = '${this.prefix}:${collection}:nextid'`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:nextid'`);
     genCode(ctx, `ret = { 'currentId', 'noError', redis.call('GET', key) or 0 }`);
 };
 
 RigidDB.prototype._list = function(ctx, collection) {
-    genCode(ctx, `local key = '${this.prefix}:${collection}:ids'`);
+    genCode(ctx, `local key = '${this._keyPrefix}:${collection}:ids'`);
     genCode(ctx, `ret = { 'list', 'noError', redis.call("ZRANGE", key, 0, -1) }`);
 };
 
@@ -524,7 +528,7 @@ RigidDB.prototype._genAllIndices = function(ctx, collection) {
 RigidDB.prototype._indexName = function(collection, index) {
     let fields = index.fields.map(field => field.name).sort().join(':');
 
-    return `${this.prefix}:${collection}:i:${fields}`;
+    return `${this._keyPrefix}:${collection}:i:${fields}`;
 };
 
 RigidDB.prototype._indexValues = function(index) {
@@ -725,6 +729,12 @@ RigidDB.prototype._deNormalizeRedisAttrs = function(collection, redisObject) {
 
     return redisObject;
 };
+
+Object.defineProperty(RigidDB.prototype, '_keyPrefix', {
+    get: function() {
+        return `${this.prefix}-${this.revision}`;
+    }
+});
 
 function newContext() {
     return {

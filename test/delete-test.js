@@ -13,10 +13,10 @@ let id;
 
 describe('Delete', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema(1, {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -64,17 +64,17 @@ describe('Delete', function() {
                 val: true
             });
 
-            return redisClient.smembers('foo:car:ids');
+            return redisClient.smembers('foo-42:car:ids');
         }).then(function(result) {
             expect(result).to.deep.equal([]);
 
-            return redisClient.get('foo:car:nextid');
+            return redisClient.get('foo-42:car:nextid');
         }).then(function(result) {
             expect(result).to.equal('1');
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(3);
+            expect(result).to.have.length(2);
         });
     });
 });

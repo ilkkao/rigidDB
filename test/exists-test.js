@@ -14,9 +14,9 @@ let id;
 describe('Exists', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new RigidDB('foo', { db: 15 });
+            store = new RigidDB('foo', 42, { db: 15 });
 
-            store.setSchema(1, {
+            store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -56,7 +56,7 @@ describe('Exists', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(6);
         });
     });
 
@@ -68,7 +68,7 @@ describe('Exists', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(6);
         });
     });
 });

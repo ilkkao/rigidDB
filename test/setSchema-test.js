@@ -3,7 +3,7 @@
 const expect = require('chai').expect,
     RigidDB = require('../index');
 
-let store = new RigidDB('foo', { db: 15 });
+let store = new RigidDB('foo', 42, { db: 15 });
 
 describe('SetSchema', function() {
     it('Missing schema parameter', function() {
@@ -20,7 +20,7 @@ describe('SetSchema', function() {
         let schema = {};
         schema.schema = schema;
 
-        return store.setSchema(1, schema).then(function(result) {
+        return store.setSchema(schema).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
                 reason: 'Invalid schema.',
@@ -30,7 +30,7 @@ describe('SetSchema', function() {
     });
 
     it('Zero collections', function() {
-        return store.setSchema(1, {}).then(function(result) {
+        return store.setSchema({}).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
                 reason: 'At least one collection must be defined.',
@@ -40,7 +40,7 @@ describe('SetSchema', function() {
     });
 
     it('Missing collection definition', function() {
-        return store.setSchema(1, { cars: {} }).then(function(result) {
+        return store.setSchema({ cars: {} }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
                 reason: 'Definition missing.',
@@ -50,7 +50,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid collection field name', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: {
                     'co:lor': 'string'
@@ -66,7 +66,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid collection field type', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: {
                     color: 'wrong'
@@ -82,7 +82,7 @@ describe('SetSchema', function() {
     });
 
     it('Missing collection field type when object', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: {
                     color: {}
@@ -98,7 +98,7 @@ describe('SetSchema', function() {
     });
 
     it('Missing unique property in index definition', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -117,7 +117,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid fields property in index definition', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -137,7 +137,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid fields property in index definition', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -157,7 +157,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid field name in index definition', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -177,7 +177,7 @@ describe('SetSchema', function() {
     });
 
     it('Invalid field definition property definition', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: { color: 'string' },
                 indices: {
@@ -197,7 +197,7 @@ describe('SetSchema', function() {
     });
 
     it('Valid parameters don\'t throw', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: {
                     color: 'string',
@@ -225,9 +225,9 @@ describe('SetSchema', function() {
     });
 
     it('Set Schema can\'t be modified', function() {
-        store = new RigidDB('baz', { db: 15 });
+        store = new RigidDB('baz', 42, { db: 15 });
 
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: {
                     color: 'string',
@@ -245,7 +245,7 @@ describe('SetSchema', function() {
                 val: true
             });
 
-            return store.setSchema(1, {
+            return store.setSchema({
                 cars: {
                     definition: {
                         color: 'string',

@@ -12,10 +12,10 @@ let store;
 
 describe('Multi', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema(1, {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -78,7 +78,7 @@ describe('Multi', function() {
                 }
             });
 
-            return redisClient.hgetall('foo:car:1');
+            return redisClient.hgetall('foo-42:car:1');
         }).then(function(result) {
             expect(result).to.deep.equal({
                 color: 'white',
@@ -87,27 +87,27 @@ describe('Multi', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
             });
 
-            return redisClient.zrange('foo:car:ids', 0, -1);
+            return redisClient.zrange('foo-42:car:ids', 0, -1);
         }).then(function(result) {
             expect(result).to.deep.equal([ '1' ]);
 
-            return redisClient.get('foo:car:nextid');
+            return redisClient.get('foo-42:car:nextid');
         }).then(function(result) {
             expect(result).to.equal('1');
 
-            return redisClient.hgetall('foo:car:i:purchaseDate');
+            return redisClient.hgetall('foo-42:car:i:purchaseDate');
         }).then(function(result) {
             let dateResult = {};
             dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.hget('foo:car:i:color:convertible:mileage', 'white:true:42');
+            return redisClient.hget('foo-42:car:i:color:convertible:mileage', 'white:true:42');
         }).then(function(result) {
             expect(result).to.deep.equal('1');
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(6);
         });
     });
 
@@ -127,7 +127,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(3);
+            expect(result).to.have.length(2);
         });
     });
 
@@ -147,7 +147,7 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(2);
+            expect(result).to.have.length(1);
         });
     });
 
@@ -174,12 +174,12 @@ describe('Multi', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(2);
+            expect(result).to.have.length(1);
         });
     });
 
     it('multi before setSchema fails', function() {
-        store = new RigidDB('bar', { db: 15 });
+        store = new RigidDB('bar', 42, { db: 15 });
 
         return store.multi(function() {}).then(function(result) {
             expect(result).to.deep.equal({

@@ -13,10 +13,10 @@ let id;
 
 describe('Update', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 });
 
         return redisClient.flushdb().then(function() {
-            return store.setSchema(1, {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -113,7 +113,7 @@ describe('Update', function() {
                 val: 3
             });
 
-            return redisClient.hgetall('foo:car:1');
+            return redisClient.hgetall('foo-42:car:1');
         }).then(function(result) {
             expect(result).to.deep.equal({
                 color: 'red',
@@ -122,27 +122,27 @@ describe('Update', function() {
                 purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString()
             });
 
-            return redisClient.zrange('foo:car:ids', 0, -1);
+            return redisClient.zrange('foo-42:car:ids', 0, -1);
         }).then(function(result) {
             expect(result).to.deep.equal([ id.toString() ]);
 
-            return redisClient.get('foo:car:nextid');
+            return redisClient.get('foo-42:car:nextid');
         }).then(function(result) {
             expect(result).to.equal(id.toString());
 
-            return redisClient.hgetall('foo:car:i:purchaseDate');
+            return redisClient.hgetall('foo-42:car:i:purchaseDate');
         }).then(function(result) {
             let dateResult = {};
             dateResult[new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
-            return redisClient.hget('foo:car:i:color:convertible:mileage', 'red:true:4242');
+            return redisClient.hget('foo-42:car:i:color:convertible:mileage', 'red:true:4242');
         }).then(function(result) {
             expect(result).to.deep.equal(id.toString());
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(6);
         });
     });
 

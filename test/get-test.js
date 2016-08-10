@@ -14,9 +14,9 @@ let id;
 describe('Get', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new RigidDB('foo', { db: 15 });
+            store = new RigidDB('foo', 42, { db: 15 });
 
-            return store.setSchema(1, {
+            return store.setSchema({
                 car: {
                     definition: {
                         color: { type: 'string', allowNull: true },
@@ -62,7 +62,7 @@ describe('Get', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(6);
         });
     });
 
@@ -81,7 +81,7 @@ describe('Get', function() {
 
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(7);
+            expect(result).to.have.length(6);
         });
     });
 });

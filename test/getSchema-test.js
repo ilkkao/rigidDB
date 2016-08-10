@@ -8,11 +8,11 @@ let redisClient = new Redis({
     db: 15
 });
 
-let store = new RigidDB('foo', { db: 15 });
+let store = new RigidDB('foo', 42, { db: 15 });
 
 describe('GetSchema', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 });
 
         return redisClient.flushdb();
     });
@@ -28,7 +28,7 @@ describe('GetSchema', function() {
     });
 
     it('Returns correct original schema', function() {
-        return store.setSchema(1, {
+        return store.setSchema({
             cars: {
                 definition: {
                     color: 'string',
