@@ -7,7 +7,7 @@ const debug = require('debug')('code'),
 
 require('console.table');
 
-function RigidDB(prefix, revision, redisOpts) {
+function RigidDB(prefix, revision, redisOpts, redisErrorHandler) {
     if (!prefix || !onlyLetters(prefix)) {
         throw('Invalid prefix.');
     }
@@ -28,8 +28,13 @@ function RigidDB(prefix, revision, redisOpts) {
         port: redisOpts.port,
         host: redisOpts.host,
         password: redisOpts.password,
-        db: redisOpts.db
+        db: redisOpts.db,
+        retryStrategy: redisOpts.retryStrategy
     });
+
+    if (redisErrorHandler) {
+        this.client.on('error', redisErrorHandler);
+    }
 
     this.schemaPromise = this.client.get(`${this._keyPrefix}:_schema`).then(result => {
         this.schemaLoading = false;

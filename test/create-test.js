@@ -12,7 +12,7 @@ let store;
 
 describe('Create', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', 42, { db: 15 });
+        store = new RigidDB('foo', 42, { db: 15 }, () => {});
 
         return redisClient.flushdb().then(function() {
             return redisClient.script('flush');
