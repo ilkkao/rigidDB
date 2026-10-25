@@ -155,16 +155,47 @@ Errors from Redis itself, such as a lost connection, are passed through as they 
 | `notFound`          | No record with the given id exists. |
 | `notUnique`         | The write would violate a unique index. |
 | `invalidQuery`      | The options or range bounds given to `find()`, `findRecords()`, or `list()` are invalid. |
+| `schemaChanged`     | Another instance changed the schema twice while the operation was running. Try again. |
 
 ### setSchema(schemaDefinition)
 
-Defines the schema of the database. The schema can be set only once; future versions of this library will support schema changes and data migrations. The schema is validated before it's activated and persisted. All other methods require a schema.
+Defines the schema of a new database. The schema is validated before it's activated and persisted. All other methods require a schema. Use `alterSchema()` to change it later.
 
 Collection, field, and index names can contain letters, numbers, dashes, and underscores.
 
 | Argument         | Description                                                   |
 |------------------|---------------------------------------------------------------|
 | schemaDefinition | The collections with their field definitions and indexes. See the example above for the supported field types and index definitions. |
+
+### alterSchema(schemaDefinition, options)
+
+Changes the schema of a database and migrates the existing records. The migration and the new schema are written in one Lua script, so a failure, such as a duplicate value for a new unique index, leaves the database as it was. The script blocks Redis while it runs, which takes time with large collections.
+
+Supported changes:
+
+- Adding a collection. Removing a collection deletes its records.
+- Adding a field. Existing records get the default value from `options`, or `null`. A field that doesn't allow `null` needs a default.
+- Removing a field deletes its values.
+- Changing a field to `allowNull: false`. Existing `null` values are replaced with the default, or the migration fails with `nullNotAllowed`.
+- Adding, removing, and changing indexes. New and changed indexes are built from the existing records.
+
+Changing the type of a field fails with `invalidSchema`.
+
+Other `RigidDB` instances that use the same database load the new schema the next time they run an operation.
+
+```javascript
+await store.alterSchema({
+    cars: {
+        fields: { ...oldFields, fuel: { type: 'string', allowNull: false } },
+        indexes: { ...oldIndexes, byFuel: { unique: false, fields: [ 'fuel' ] } }
+    }
+}, { defaults: { cars: { fuel: 'petrol' } } });
+```
+
+| Argument         | Description                                                   |
+|------------------|---------------------------------------------------------------|
+| schemaDefinition | The complete new schema. |
+| options          | Optional. `defaults`: values per collection and field for the migrated records. |
 
 ### getSchema()
 

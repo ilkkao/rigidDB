@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0
 
 ### Breaking changes
 
@@ -14,14 +14,16 @@
 
 ### New features
 
+- The third constructor argument can be an existing ioredis client, a `redis://` or `rediss://` URL, or any ioredis options, such as `username`, `tls`, or `sentinels`. The `keyPrefix` option is rejected, because the Lua scripts can't honor it.
+- `RigidDB` takes the type of the schema as a type argument. Collection names, the values given to `create()`, `update()`, and transactions, the records returned by `get()`, and `find()` queries are then checked at compile time. `defineSchema()` keeps the literal types of a schema, and `RecordOf<S, C>` is the type of a record.
 - Range indexes (`range: true`) on one `int`, `date`, or `timestamp` field. `find()` queries them with `{ gt, gte, lt, lte }` bounds and sorts the results by the field value.
 - `find()` and `list()` take `limit`, `offset`, and `order` options. Results of an exact index are sorted by id.
 - `findRecords()` resolves to the matching records with their ids, and `getMany()` fetches several records by id, both in one Lua script.
 - Error code `invalidQuery` for invalid options and range bounds.
 - Transactions are all or nothing: when an operation fails, or Redis returns an error, the changes of the operations before it are rolled back. Single operations are rolled back on Redis errors too.
 - In a transaction, `create()` returns a reference to the new record that later operations can use as the id.
-- `RigidDB` takes the type of the schema as a type argument. Collection names, the values given to `create()`, `update()`, and transactions, the records returned by `get()`, and `find()` queries are then checked at compile time. `defineSchema()` keeps the literal types of a schema, and `RecordOf<S, C>` is the type of a record.
-- The third constructor argument can be an existing ioredis client, a `redis://` or `rediss://` URL, or any ioredis options, such as `username`, `tls`, or `sentinels`. The `keyPrefix` option is rejected, because the Lua scripts can't honor it.
+- `alterSchema()` changes the schema and migrates the existing records in one Lua script: add and remove collections, fields, and indexes, change indexes, and disallow `null`, with default values for the migrated records.
+- Instances notice a schema changed by another instance: scripts check a schema version, and on a mismatch the instance loads the new schema and runs the operation again. A transaction callback can therefore be called twice.
 
 ## 1.0.0
 

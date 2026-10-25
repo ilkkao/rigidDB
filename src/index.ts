@@ -50,6 +50,12 @@ export interface FindOptions {
     order?: 'asc' | 'desc';
 }
 
+export interface AlterSchemaOptions<S extends Schema = Schema> {
+    // Values for fields added to existing records, and for the null values of fields that no
+    // longer allow null. Without a default, an added field is null.
+    defaults?: { [C in CollectionName<S>]?: Partial<RecordOf<S, C>> };
+}
+
 export interface FoundRecord<R> {
     id: number;
     record: R;
@@ -108,7 +114,8 @@ export type Method =
     | 'find'
     | 'findRecords'
     | 'getMany'
-    | 'transaction';
+    | 'transaction'
+    | 'alterSchema';
 
 export type ErrorCode =
     | 'invalidStoredSchema'
@@ -122,7 +129,8 @@ export type ErrorCode =
     | 'notUnique'
     | 'invalidSchema'
     | 'schemaExists'
-    | 'invalidQuery';
+    | 'invalidQuery'
+    | 'schemaChanged';
 
 export interface RigidDBErrorDetails {
     // Names of the violated unique indexes, set for notUnique
@@ -211,6 +219,12 @@ interface NormalizedCollection {
 
 type NormalizedSchema = Record<string, NormalizedCollection>;
 
+interface ParsedSchema<S> {
+    json: string;
+    src: S;
+    normalized: NormalizedSchema;
+}
+
 interface RedisIndex {
     name: string;
     redisKey: string;
@@ -222,6 +236,7 @@ interface RedisIndex {
 
 // Collects the Lua code and the parameters of a script
 class Context {
+    readonly method: Method;
     readonly params: string[] = [];
     script = '';
     error: { method: Method; err: ErrorCode } | null = null;
@@ -229,6 +244,12 @@ class Context {
     // Number of create() operations in the transaction
     createCount = 0;
     private depth = 0;
+
+    // The script checks that the schema version is still the given one, ARGV[1]
+    constructor(method: Method, schemaVersion: string) {
+        this.method = method;
+        this.arg(schemaVersion);
+    }
 
     // Appends Lua code. The common indentation of the snippet is replaced with the indentation of
     // the current block, so the generated script is indented like hand-written Lua.
@@ -277,6 +298,8 @@ export class RigidDB<S extends Schema = Schema> {
     // A client passed in by the caller is left open by quit()
     private readonly ownsClient: boolean;
     private invalidStoredSchema = false;
+    // Incremented by alterSchema(). Scripts fail with schemaChanged if it isn't the loaded one.
+    private schemaVersion = '0';
     private schema: NormalizedSchema | null = null;
     private srcSchema: S | null = null;
     private schemaPromise: Promise<void> | null = null;
@@ -334,6 +357,15 @@ export class RigidDB<S extends Schema = Schema> {
     async setSchema(schema: S): Promise<void> {
         await this.ensureSchema();
         return this.setSchemaNow(schema);
+    }
+
+    // Changes the schema and migrates the existing records in one Lua script. Supported changes:
+    // adding and removing collections, fields, and indexes, changing indexes, and disallowing null.
+    async alterSchema(schema: S, options: AlterSchemaOptions<S> = {}): Promise<void> {
+        const parsed = this.parseSchema('alterSchema', schema);
+
+        await this.run('alterSchema', ctx => this.alterSchemaOp(ctx, parsed, options.defaults ?? {}));
+        await this.reloadSchema();
     }
 
     async getSchema(): Promise<{ revision: number; schema: S }> {
@@ -401,18 +433,11 @@ export class RigidDB<S extends Schema = Schema> {
 
     // Resolves to the results of the operations, in order. If an operation fails, the changes of
     // the transaction are rolled back. An exists() that finds no record fails with notFound.
+    // The callback is called again if another process changes the schema before the transaction runs.
     async transaction(cb: (tr: Transaction<S>) => void): Promise<unknown[]> {
-        await this.ensureSchema();
+        return this.run('transaction', ctx => {
+            ctx.inTransaction = true;
 
-        const ctx = new Context();
-
-        ctx.inTransaction = true;
-
-        if (this.invalidStoredSchema) {
-            ctx.error = { method: 'transaction', err: 'invalidStoredSchema' };
-        } else if (!this.schema) {
-            ctx.error = { method: 'transaction', err: 'schemaMissing' };
-        } else {
             const execute = <A extends unknown[]>(op: Op<A>, method: Method, collection: string, ...args: A) => {
                 if (!ctx.error) {
                     this.runOp(ctx, op, method, collection, args);
@@ -429,9 +454,7 @@ export class RigidDB<S extends Schema = Schema> {
                 get: (collection, id) => execute(this.getOp, 'get', collection, id),
                 exists: (collection, id) => execute(this.existsOp, 'exists', collection, id)
             });
-        }
-
-        return this.exec(ctx) as Promise<unknown[]>;
+        }) as Promise<unknown[]>;
     }
 
     // Print is for debugging, doesn't scale currently
@@ -465,8 +488,18 @@ export class RigidDB<S extends Schema = Schema> {
         return this.schemaPromise;
     }
 
+    private async reloadSchema(): Promise<void> {
+        this.invalidStoredSchema = false;
+        this.schema = null;
+        this.srcSchema = null;
+        this.schemaPromise = null;
+        await this.ensureSchema();
+    }
+
     private async loadSchema(): Promise<void> {
-        const result = await this.client.get(`${this.keyPrefix}:_schema`);
+        const [result, version] = await this.client.mget(`${this.keyPrefix}:_schema`, `${this.keyPrefix}:_schema_version`);
+
+        this.schemaVersion = version ?? '0';
 
         if (!result) {
             return;
@@ -496,30 +529,189 @@ export class RigidDB<S extends Schema = Schema> {
             throw new RigidDBError('setSchema', 'schemaExists');
         }
 
-        let srcSchemaJSON: string | undefined;
+        const { json, src, normalized } = this.parseSchema('setSchema', schema);
+
+        this.srcSchema = src;
+        this.schema = normalized;
+
+        await this.client.set(`${this.keyPrefix}:_schema`, json);
+    }
+
+    // Validates a schema and returns it as JSON, as a copy, and normalized
+    private parseSchema(method: Method, schema: S): ParsedSchema<S> {
+        let json: string | undefined;
 
         try {
-            srcSchemaJSON = JSON.stringify(schema);
+            json = JSON.stringify(schema);
         } catch {
             // Circular reference
         }
 
-        if (srcSchemaJSON === undefined) {
-            throw new RigidDBError('setSchema', 'invalidSchema', { reason: 'Invalid schema.' });
+        if (json === undefined) {
+            throw new RigidDBError(method, 'invalidSchema', { reason: 'Invalid schema.' });
         }
 
         // Work with a copy so that later changes to the caller's object don't leak in.
-        const srcSchema: unknown = JSON.parse(srcSchemaJSON);
-        const ret = normalizeAndVerifySchema(srcSchema);
+        const src: unknown = JSON.parse(json);
+        const ret = normalizeAndVerifySchema(src);
 
         if ('err' in ret) {
-            throw new RigidDBError('setSchema', 'invalidSchema', { reason: ret.err });
+            throw new RigidDBError(method, 'invalidSchema', { reason: ret.err });
         }
 
-        this.srcSchema = srcSchema as S;
-        this.schema = ret.schema;
+        return { json, src: src as S, normalized: ret.schema };
+    }
 
-        await this.client.set(`${this.keyPrefix}:_schema`, srcSchemaJSON);
+    private alterSchemaOp(ctx: Context, parsed: ParsedSchema<S>, defaults: Record<string, unknown>): void {
+        const before = this.schema as NormalizedSchema;
+        const after = parsed.normalized;
+
+        for (const collection of new Set([ ...Object.keys(before), ...Object.keys(after) ])) {
+            const oldDefinition = Object.hasOwn(before, collection) ? before[collection] : undefined;
+            const newDefinition = Object.hasOwn(after, collection) ? after[collection] : undefined;
+
+            if (!newDefinition) {
+                this.dropCollection(ctx, collection, oldDefinition as NormalizedCollection);
+            } else if (oldDefinition) {
+                const collectionDefaults = (Object.hasOwn(defaults, collection) ? defaults[collection] : {}) as FieldValues;
+
+                this.migrateCollection(ctx, collection, oldDefinition, newDefinition, collectionDefaults);
+            }
+        }
+
+        ctx.lua(`
+            w_set('${this.keyPrefix}:_schema', ${ctx.arg(parsed.json)})
+            w_incr('${this.keyPrefix}:_schema_version')
+            ret = { 'alterSchema', 'noError' }
+        `);
+    }
+
+    private dropCollection(ctx: Context, collection: string, definition: NormalizedCollection): void {
+        const ids = `${this.keyPrefix}:${collection}:ids`;
+
+        ctx.lua(`for _, id in ipairs(redis.call('ZRANGE', '${ids}', 0, -1)) do`);
+        ctx.indented(() => {
+            ctx.lua(`
+                local key = '${this.keyPrefix}:${collection}:' .. id
+                local values = hgetall(key)
+            `);
+            this.removeIndexes(ctx, this.indexesOf(collection, definition), true);
+            ctx.lua(`
+                w_del_hash(key)
+                w_zrem('${ids}', id)
+            `);
+        });
+        ctx.lua('end');
+        ctx.lua(`w_del_key('${this.keyPrefix}:${collection}:nextid')`);
+    }
+
+    private migrateCollection(
+        ctx: Context,
+        collection: string,
+        before: NormalizedCollection,
+        after: NormalizedCollection,
+        defaults: FieldValues
+    ): void {
+        const redisDefaults = this.toRedisValues(collection, defaults, after.fields);
+
+        if ('err' in redisDefaults) {
+            ctx.error = { method: 'alterSchema', err: redisDefaults.err };
+            return;
+        }
+
+        const defaultValues = redisDefaults.val;
+        const oldField = (name: string) => (Object.hasOwn(before.fields, name) ? before.fields[name] : undefined);
+
+        for (const [name, field] of Object.entries(after.fields)) {
+            const old = oldField(name);
+
+            if (old && old.type !== field.type) {
+                throw new RigidDBError('alterSchema', 'invalidSchema', {
+                    reason: `Changing the type of field '${name}' in '${collection}' is not supported.`
+                });
+            }
+
+            if (!old && !field.allowNull && !Object.hasOwn(defaultValues, name)) {
+                throw new RigidDBError('alterSchema', 'invalidSchema', {
+                    reason: `Field '${name}' added to '${collection}' needs a default value.`
+                });
+            }
+        }
+
+        const removedFields = Object.keys(before.fields).filter(name => !Object.hasOwn(after.fields, name));
+        const addedFields = Object.keys(after.fields).filter(name => !oldField(name));
+        const requiredFields = Object.entries(after.fields)
+            .filter(([name, field]) => oldField(name)?.allowNull && !field.allowNull)
+            .map(([name]) => name);
+
+        // A changed index is dropped and built again
+        const oldIndexes = this.indexesOf(collection, before);
+        const newIndexes = this.indexesOf(collection, after);
+        const droppedIndexes = oldIndexes.filter(index => !newIndexes.some(candidate => sameIndex(index, candidate)));
+        const addedIndexes = newIndexes.filter(index => !oldIndexes.some(candidate => sameIndex(index, candidate)));
+
+        if (removedFields.length + addedFields.length + requiredFields.length + droppedIndexes.length + addedIndexes.length === 0) {
+            return;
+        }
+
+        const setField = (name: string, value: string) => {
+            const ref = ctx.arg(value);
+
+            ctx.lua(`
+                w_hset_field(key, '${name}', ${ref})
+                values['${name}'] = ${ref}
+            `);
+        };
+
+        ctx.lua(`for _, id in ipairs(redis.call('ZRANGE', '${this.keyPrefix}:${collection}:ids', 0, -1)) do`);
+        ctx.indented(() => {
+            ctx.lua(`
+                local key = '${this.keyPrefix}:${collection}:' .. id
+                local values = hgetall(key)
+            `);
+
+            this.removeIndexes(ctx, droppedIndexes, true);
+
+            for (const name of removedFields) {
+                ctx.lua(`
+                    w_hdel(key, '${name}')
+                    values['${name}'] = nil
+                `);
+            }
+
+            for (const name of addedFields) {
+                setField(name, defaultValues[name] ?? '~');
+            }
+
+            for (const name of requiredFields) {
+                const value = defaultValues[name];
+
+                ctx.lua(`if values['${name}'] == '~' then`);
+                ctx.indented(() => {
+                    if (value === undefined) {
+                        ctx.lua(`return abort({ 'alterSchema', 'nullNotAllowed' })`);
+                    } else {
+                        setField(name, value);
+                    }
+                });
+                ctx.lua('end');
+            }
+
+            this.addIndexes(ctx, addedIndexes.filter(index => !index.range), 'alterSchema', true, new Map());
+
+            for (const index of addedIndexes.filter(candidate => candidate.range)) {
+                const name = (index.fields[0] as NormalizedIndexField).name;
+
+                ctx.lua(`
+                    if values['${name}'] ~= '~' then
+                        local score = score_of('${(after.fields[name] as NormalizedField).type}', values['${name}'])
+                        if not score then return abort({ 'alterSchema', 'wrongType' }) end
+                        w_zadd('${index.redisKey}', score, id)
+                    end
+                `);
+            }
+        });
+        ctx.lua('end');
     }
 
     private async execSingle<T, A extends unknown[]>(
@@ -528,19 +720,39 @@ export class RigidDB<S extends Schema = Schema> {
         collection: string,
         ...args: A
     ): Promise<T> {
-        await this.ensureSchema();
+        return this.run(method, ctx => this.runOp(ctx, op, method, collection, args)) as Promise<T>;
+    }
 
-        const ctx = new Context();
+    // Builds the script with the loaded schema and runs it. If another process has changed the
+    // schema since it was loaded, loads the new schema and tries once more.
+    private async run(method: Method, build: (ctx: Context) => void): Promise<unknown> {
+        const attempt = async () => {
+            await this.ensureSchema();
 
-        if (this.invalidStoredSchema) {
-            ctx.error = { method, err: 'invalidStoredSchema' };
-        } else if (!this.schema) {
-            ctx.error = { method, err: 'schemaMissing' };
-        } else {
-            this.runOp(ctx, op, method, collection, args);
+            const ctx = new Context(method, this.schemaVersion);
+
+            if (this.invalidStoredSchema) {
+                ctx.error = { method, err: 'invalidStoredSchema' };
+            } else if (!this.schema) {
+                ctx.error = { method, err: 'schemaMissing' };
+            } else {
+                build(ctx);
+            }
+
+            return this.exec(ctx);
+        };
+
+        try {
+            return await attempt();
+        } catch (err) {
+            if (!(err instanceof RigidDBError) || err.code !== 'schemaChanged') {
+                throw err;
+            }
+
+            await this.reloadSchema();
+
+            return attempt();
         }
-
-        return this.exec(ctx) as Promise<T>;
     }
 
     private runOp<A extends unknown[]>(ctx: Context, op: Op<A>, method: Method, collection: string, args: A): void {
@@ -574,6 +786,10 @@ export class RigidDB<S extends Schema = Schema> {
             'local created, results = {}, {}',
             '',
             'local ok, reply = pcall(function ()',
+            `    if (redis.call('GET', '${this.keyPrefix}:_schema_version') or '0') ~= ARGV[1] then`,
+            `        return { '${ctx.method}', 'schemaChanged' }`,
+            '    end',
+            '',
             ...body.split('\n').map(line => `    ${line}`.trimEnd()),
             'end)',
             '',
@@ -669,7 +885,7 @@ export class RigidDB<S extends Schema = Schema> {
         `);
         this.addValuesVar(ctx, redisValues.val);
 
-        this.addIndexes(ctx, collection, 'create', true, this.rangeScores(collection, values));
+        this.addIndexes(ctx, this.genAllIndexes(collection), 'create', true, this.rangeScores(collection, values));
 
         ctx.lua(`
             w_hset(key, values)
@@ -711,14 +927,14 @@ export class RigidDB<S extends Schema = Schema> {
 
         ctx.lua(`values = hgetall(key)`);
         // Range index entries are replaced by addIndexes() for the changed fields only
-        this.removeIndexes(ctx, collection, false);
+        this.removeIndexes(ctx, this.genAllIndexes(collection), false);
 
         for (const [prop, ref] of argRefs) {
             ctx.lua(`values['${prop}'] = ${ref}`);
         }
 
         // Uniqueness was verified above, before anything was modified
-        this.addIndexes(ctx, collection, 'update', false, this.rangeScores(collection, values));
+        this.addIndexes(ctx, this.genAllIndexes(collection), 'update', false, this.rangeScores(collection, values));
 
         ctx.lua(`
             w_hset(key, values)
@@ -734,7 +950,7 @@ export class RigidDB<S extends Schema = Schema> {
             local values = hgetall(key)
         `);
 
-        this.removeIndexes(ctx, collection, true);
+        this.removeIndexes(ctx, this.genAllIndexes(collection), true);
 
         ctx.lua(`
             w_zrem('${this.keyPrefix}:${collection}:ids', id)
@@ -910,10 +1126,12 @@ export class RigidDB<S extends Schema = Schema> {
     }
 
     private genAllIndexes(collection: string): RedisIndex[] {
-        const indexes = this.requireCollectionSchema(collection).indexes;
+        return this.indexesOf(collection, this.requireCollectionSchema(collection));
+    }
 
+    private indexesOf(collection: string, definition: NormalizedCollection): RedisIndex[] {
         // { name: "color:mileage", value: 'red:423423', unique: false }
-        return Object.entries(indexes).map(([name, index]) => ({
+        return Object.entries(definition.indexes).map(([name, index]) => ({
             name,
             redisKey: this.indexName(collection, index),
             redisValue: indexValues(index),
@@ -951,13 +1169,11 @@ export class RigidDB<S extends Schema = Schema> {
 
     private addIndexes(
         ctx: Context,
-        collection: string,
+        indexes: RedisIndex[],
         method: Method,
         assertUniq: boolean,
         scores: Map<string, string | null>
     ): void {
-        const indexes = this.genAllIndexes(collection);
-
         if (assertUniq) {
             this.assertUniqueIndexesFree(ctx, indexes, method);
         }
@@ -993,8 +1209,8 @@ export class RigidDB<S extends Schema = Schema> {
         }
     }
 
-    private removeIndexes(ctx: Context, collection: string, withRange: boolean): void {
-        for (const { redisKey, redisValue, range } of this.genAllIndexes(collection)) {
+    private removeIndexes(ctx: Context, indexes: RedisIndex[], withRange: boolean): void {
+        for (const { redisKey, redisValue, range } of indexes) {
             if (range) {
                 if (withRange) {
                     ctx.lua(`w_zrem('${redisKey}', id)`);
@@ -1056,9 +1272,12 @@ export class RigidDB<S extends Schema = Schema> {
         return printable;
     }
 
-    private toRedisValues(collection: string, values: FieldValues): { val: Record<string, string> } | { err: ErrorCode } {
+    private toRedisValues(
+        collection: string,
+        values: FieldValues,
+        fields = this.requireCollectionSchema(collection).fields
+    ): { val: Record<string, string> } | { err: ErrorCode } {
         const redisValues: Record<string, string> = {};
-        const fields = this.requireCollectionSchema(collection).fields;
 
         for (const [prop, propVal] of Object.entries(values)) {
             const field = Object.hasOwn(fields, prop) ? fields[prop] : undefined;
@@ -1296,6 +1515,10 @@ function indexValues(index: NormalizedIndex): string {
 // A find() query value: an exact field value or the bounds of a range query
 type FieldQuery = Record<string, FieldValue | Range<number | Date>>;
 
+function sameIndex(a: RedisIndex, b: RedisIndex): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function isCount(value: unknown): boolean {
     return Number.isInteger(value) && (value as number) >= 0;
 }
@@ -1473,6 +1696,38 @@ function utilityFuncs(): string {
             local old = redis.call('HGETALL', key)
             table.insert(undo, function () redis.call('HSET', key, unpack(old)) end)
             redis.call('DEL', key)
+        end
+
+        local w_set = function (key, value)
+            local old = redis.call('GET', key)
+            table.insert(undo, function ()
+                if old then redis.call('SET', key, old) else redis.call('DEL', key) end
+            end)
+            redis.call('SET', key, value)
+        end
+
+        local w_del_key = function (key)
+            local old = redis.call('GET', key)
+            if not old then return end
+            table.insert(undo, function () redis.call('SET', key, old) end)
+            redis.call('DEL', key)
+        end
+
+        -- Range index score of a stored value. Dates are stored as ISO 8601 strings.
+        local score_of = function (field_type, value)
+            if field_type ~= 'date' then return value end
+            local y, mo, d, h, mi, s, ms = string.match(value, '^(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)%.(%d%d%d)Z$')
+            if not y then return nil end
+            y, mo = tonumber(y), tonumber(mo)
+            if mo <= 2 then y = y - 1 end
+            -- Days since 1970-01-01, see https://howardhinnant.github.io/date_algorithms.html#days_from_civil
+            local era = math.floor(y / 400)
+            local yoe = y - era * 400
+            local doy = math.floor((153 * ((mo + 9) % 12) + 2) / 5) + tonumber(d) - 1
+            local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+            local days = era * 146097 + doe - 719468
+            local ms_total = ((days * 24 + tonumber(h)) * 60 + tonumber(mi)) * 60000 + tonumber(s) * 1000 + tonumber(ms)
+            return string.format('%.0f', ms_total)
         end
 
         local w_del_set = function (key)
