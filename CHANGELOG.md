@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.1
+
+### Fixes
+
+- `rigiddb/package.json` can be imported. It was missing from `exports`, which broke tools that read the package version that way.
+
+### Other changes
+
+- Test coverage is 100%, and CI fails if it drops.
+- Coverage is reported to Codecov instead of Coveralls.
+
 ## 0.12.0
 
 ### Breaking changes

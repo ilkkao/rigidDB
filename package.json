@@ -1,13 +1,14 @@
 {
   "name": "rigiddb",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Object store with an index and strict schema",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
