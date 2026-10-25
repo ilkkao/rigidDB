@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # Codecov upload with OIDC instead of a token
 
 jobs:
   test:
@@ -43,8 +44,11 @@ jobs:
       - run: npm run build
       - run: npm run coverage
 
-      - name: Upload coverage to Coveralls
+      - name: Upload coverage to Codecov
         if: matrix.node == 26
-        uses: coverallsapp/github-action@v2
+        uses: codecov/codecov-action@v7
         with:
-          file: coverage/lcov.info
+          files: coverage/lcov.info
+          disable_search: true
+          use_oidc: true
+          fail_ci_if_error: true
