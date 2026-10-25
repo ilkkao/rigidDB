@@ -1,6 +1,6 @@
 import { expect } from 'chai';
-import { RigidDB, type FieldValues } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { RigidDB, RigidDBError, type FieldValues } from '../src/index.ts';
+import { redisClient, redisOpts, expectError, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -21,6 +21,36 @@ describe('Errors', function() {
         });
     });
 
+    it('Failures are thrown as RigidDBError', async function() {
+        const error = await store.get('car', 42).then(shouldNotResolve, (err: unknown) => err);
+
+        expect(error).to.be.instanceOf(RigidDBError);
+        expect(error).to.be.instanceOf(Error);
+        expect(error).to.include({ name: 'RigidDBError', code: 'notFound', method: 'get', message: 'get() failed: notFound' });
+    });
+
+    it('notUnique error lists the violated indexes', async function() {
+        const fresh = new RigidDB('bar', 42, redisOpts);
+
+        await fresh.setSchema({ car: { fields: { model: 'string' }, indexes: { byModel: { unique: true, fields: [ 'model' ] } } } });
+        await fresh.create('car', { model: 'a' });
+
+        const error = await fresh.create('car', { model: 'a' }).then(shouldNotResolve, (err: unknown) => err);
+
+        expect(error).to.include({ code: 'notUnique', message: 'create() failed: notUnique (byModel)' });
+        expect((error as RigidDBError).indexes).to.deep.equal([ 'byModel' ]);
+    });
+
+    it('invalidSchema error has the reason', async function() {
+        const error = await new RigidDB('bar', 42, redisOpts).setSchema({}).then(shouldNotResolve, (err: unknown) => err);
+
+        expect(error).to.include({
+            code: 'invalidSchema',
+            reason: 'At least one collection must be defined.',
+            message: 'setSchema() failed: invalidSchema (At least one collection must be defined.)'
+        });
+    });
+
     for (const [field, value] of [
         [ 'model', 5 ],
         [ 'mileage', '1' ],
@@ -29,10 +59,9 @@ describe('Errors', function() {
         [ 'convertible', 'yes' ]
     ] as const) {
         it(`Wrong type is rejected: ${field} = ${String(value)}`, async function() {
-            expect(await store.create('car', { ...validCar, [field]: value })).to.deep.equal({
+            await expectError(store.create('car', { ...validCar, [field]: value }), {
                 method: 'create',
-                err: 'wrongType',
-                val: false
+                err: 'wrongType'
             });
         });
     }
@@ -42,10 +71,10 @@ describe('Errors', function() {
             const fresh = new RigidDB('bar', 42, redisOpts);
 
             // @ts-expect-error: invalid input on purpose
-            expect(await fresh.setSchema(schema)).to.deep.equal({
+            await expectError(fresh.setSchema(schema), {
                 method: 'setSchema',
-                reason: 'Invalid schema.',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid schema.'
             });
         });
     }
@@ -54,10 +83,10 @@ describe('Errors', function() {
         const fresh = new RigidDB('bar', 42, redisOpts);
 
         // @ts-expect-error: invalid input on purpose
-        expect(await fresh.setSchema({ car: { fields: { model: 'string' }, indexes: [] } })).to.deep.equal({
+        await expectError(fresh.setSchema({ car: { fields: { model: 'string' }, indexes: [] } }), {
             method: 'setSchema',
-            reason: 'Invalid indexes definition.',
-            val: false
+            err: 'invalidSchema',
+            reason: 'Invalid indexes definition.'
         });
     });
 
@@ -65,12 +94,11 @@ describe('Errors', function() {
         const fresh = new RigidDB('bar', 42, redisOpts);
 
         // @ts-expect-error: invalid input on purpose
-        expect(await fresh.setSchema({ car: { fields: { model: 'string' }, indexes: { first: { unique: true, fields: [ 5 ] } } } }))
-            .to.deep.equal({
-                method: 'setSchema',
-                reason: 'Invalid or missing index fields definition',
-                val: false
-            });
+        await expectError(fresh.setSchema({ car: { fields: { model: 'string' }, indexes: { first: { unique: true, fields: [ 5 ] } } } }), {
+            method: 'setSchema',
+            err: 'invalidSchema',
+            reason: 'Invalid or missing index fields definition'
+        });
     });
 
     it('Redis error rejects the promise and the script is not run again', async function() {

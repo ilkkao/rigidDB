@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts, unwrap } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 let id: number;
@@ -38,25 +38,22 @@ describe('Delete', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
-            id = unwrap(result);
+            id = result;
         });
     });
 
     it('Fails if id doesn\'t exists', function() {
-        return store.delete('car', 42).then(function(result) {
-            expect(result).to.deep.equal({
+        return store.delete('car', 42).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'delete',
-                err: 'notFound',
-                val: false
+                err: 'notFound'
             });
         });
     });
 
     it('Redis is updated correctly', function() {
         return store.delete('car', id).then(function(result) {
-            expect(result).to.deep.equal({
-                val: true
-            });
+            expect(result).to.equal(undefined);
 
             return redisClient.smembers('foo-42:car:ids');
         }).then(function(result) {

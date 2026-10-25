@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, expectError } from './helpers.ts';
 
 // Schema and record as rigiddb 0.x stored them
 const legacySchema = {
@@ -25,7 +25,6 @@ describe('Database created by rigiddb 0.x', function() {
         const store = new RigidDB('foo', 42, redisOpts);
 
         expect(await store.getSchema()).to.deep.equal({
-            val: {
                 revision: 42,
                 schema: {
                     car: {
@@ -33,15 +32,13 @@ describe('Database created by rigiddb 0.x', function() {
                         indexes: { byModel: { unique: true, fields: [ 'model' ] } }
                     }
                 }
-            }
-        });
-        expect(await store.get('car', 1)).to.deep.equal({ val: { model: 'sedan', mileage: 100 } });
-        expect(await store.find('car', { model: 'sedan' })).to.deep.equal({ val: [ 1 ] });
-        expect(await store.create('car', { model: 'sedan', mileage: 1 })).to.deep.equal({
+            });
+        expect(await store.get('car', 1)).to.deep.equal({ model: 'sedan', mileage: 100 });
+        expect(await store.find('car', { model: 'sedan' })).to.deep.equal([ 1 ]);
+        await expectError(store.create('car', { model: 'sedan', mileage: 1 }), {
             method: 'create',
             err: 'notUnique',
-            indexes: [ 'byModel' ],
-            val: false
+            indexes: [ 'byModel' ]
         });
     });
 
@@ -50,8 +47,8 @@ describe('Database created by rigiddb 0.x', function() {
 
         const store = new RigidDB('foo', 42, redisOpts);
 
-        expect(await store.create('car', { model: 'sedan' })).to.deep.equal({ val: 1 });
-        expect(await store.count('car')).to.deep.equal({ val: 1 });
+        expect(await store.create('car', { model: 'sedan' })).to.deep.equal(1);
+        expect(await store.count('car')).to.deep.equal(1);
     });
 
     for (const stored of [ 'null', '{ "car": null }' ]) {
@@ -60,10 +57,9 @@ describe('Database created by rigiddb 0.x', function() {
 
             const store = new RigidDB('foo', 42, redisOpts);
 
-            expect(await store.list('car')).to.deep.equal({
+            await expectError(store.list('car'), {
                 method: 'list',
-                err: 'invalidStoredSchema',
-                val: false
+                err: 'invalidStoredSchema'
             });
         });
     }

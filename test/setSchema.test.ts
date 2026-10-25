@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -13,11 +13,11 @@ describe('SetSchema', function() {
 
     it('Missing schema parameter', function() {
         // @ts-expect-error: invalid input on purpose
-        return store.setSchema().then(function(result) {
-            expect(result).to.deep.equal({
+        return store.setSchema().then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid schema.',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid schema.'
             });
         });
     });
@@ -27,32 +27,32 @@ describe('SetSchema', function() {
         // @ts-expect-error: invalid input on purpose
         schema.schema = schema;
 
-        return store.setSchema(schema).then(function(result) {
-            expect(result).to.deep.equal({
+        return store.setSchema(schema).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid schema.',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid schema.'
             });
         });
     });
 
     it('Zero collections', function() {
-        return store.setSchema({}).then(function(result) {
-            expect(result).to.deep.equal({
+        return store.setSchema({}).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'At least one collection must be defined.',
-                val: false
+                err: 'invalidSchema',
+                reason: 'At least one collection must be defined.'
             });
         });
     });
 
     it('Missing collection fields', function() {
         // @ts-expect-error: invalid input on purpose
-        return store.setSchema({ cars: {} }).then(function(result) {
-            expect(result).to.deep.equal({
+        return store.setSchema({ cars: {} }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Fields missing.',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Fields missing.'
             });
         });
     });
@@ -64,11 +64,11 @@ describe('SetSchema', function() {
                     'co:lor': 'string'
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid field name (letters, numbers, and dashes allowed): \'co:lor\'',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid field name (letters, numbers, and dashes allowed): \'co:lor\''
             });
         });
     });
@@ -81,11 +81,11 @@ describe('SetSchema', function() {
                     color: 'wrong'
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid type: \'wrong\'',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid type: \'wrong\''
             });
         });
     });
@@ -98,11 +98,11 @@ describe('SetSchema', function() {
                     color: {}
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Type definition missing.',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Type definition missing.'
             });
         });
     });
@@ -118,11 +118,11 @@ describe('SetSchema', function() {
                     }
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid or missing index unique definition',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid or missing index unique definition'
             });
         });
     });
@@ -139,11 +139,11 @@ describe('SetSchema', function() {
                     }
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid or missing index fields definition',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid or missing index fields definition'
             });
         });
     });
@@ -159,11 +159,11 @@ describe('SetSchema', function() {
                     }
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid or missing index fields definition',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid or missing index fields definition'
             });
         });
     });
@@ -179,11 +179,11 @@ describe('SetSchema', function() {
                     }
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid index field name: \'mileage\'',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid index field name: \'mileage\''
             });
         });
     });
@@ -200,11 +200,11 @@ describe('SetSchema', function() {
                     }
                 }
             }
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Invalid index field property: \'caseInSensitive\'',
-                val: false
+                err: 'invalidSchema',
+                reason: 'Invalid index field property: \'caseInSensitive\''
             });
         });
     });
@@ -231,9 +231,7 @@ describe('SetSchema', function() {
                 }
             }
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: true
-            });
+            expect(result).to.equal(undefined);
         });
     });
 
@@ -254,9 +252,7 @@ describe('SetSchema', function() {
                 }
             }
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: true
-            });
+            expect(result).to.equal(undefined);
 
             return store.setSchema({
                 cars: {
@@ -273,11 +269,10 @@ describe('SetSchema', function() {
                     }
                 }
             });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Schema already exists',
-                val: false
+                err: 'schemaExists'
             });
         });
     });

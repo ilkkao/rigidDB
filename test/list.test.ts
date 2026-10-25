@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -48,26 +48,21 @@ describe('List', function() {
         }).then(function() {
             return store.list('car');
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: [ 1, 2 ]
-            });
+            expect(result).to.deep.equal([ 1, 2 ]);
         });
     });
 
     it('Get ids for empty collection', function() {
         return store.list('car').then(function(result) {
-            expect(result).to.deep.equal({
-                val: []
-            });
+            expect(result).to.deep.equal([]);
         });
     });
 
     it('Get ids for invalid collection', function() {
-        return store.list('bikes').then(function(result) {
-            expect(result).to.deep.equal({
+        return store.list('bikes').then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'unknownCollection',
-                method: 'list',
-                val: false
+                method: 'list'
             });
         });
     });

@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts, unwrap } from './helpers.ts';
+import { redisClient, redisOpts } from './helpers.ts';
 
 let store: RigidDB;
 let id: number;
@@ -38,15 +38,13 @@ describe('Exists', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
-            id = unwrap(result);
+            id = result;
         });
     });
 
     it('Fails if id doesn\'t exist', function() {
         return store.exists('car', 4242).then(function(result) {
-            expect(result).to.deep.equal({
-                val: false
-            });
+            expect(result).to.deep.equal(false);
 
             return redisClient.keys('*');
         }).then(function(result) {
@@ -56,9 +54,7 @@ describe('Exists', function() {
 
     it('Succeeds if id exists', function() {
         return store.exists('car', id).then(function(result) {
-            expect(result).to.deep.equal({
-                val: true
-            });
+            expect(result).to.deep.equal(true);
 
             return redisClient.keys('*');
         }).then(function(result) {

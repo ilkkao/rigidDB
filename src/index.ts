@@ -54,23 +54,35 @@ export type ErrorCode =
     | 'nullNotAllowed'
     | 'wrongType'
     | 'notFound'
-    | 'notUnique';
+    | 'notUnique'
+    | 'invalidSchema'
+    | 'schemaExists';
 
-export interface Success<T> {
-    val: T;
-}
-
-export interface Failure {
-    val: false;
-    err: ErrorCode;
-    method: Method;
-    // Names of the conflicting unique indexes. Set when a create or update fails in Redis.
+export interface RigidDBErrorDetails {
+    // Names of the violated unique indexes, set for notUnique
     indexes?: string[];
+    // Why the schema is invalid, set for invalidSchema
+    reason?: string;
 }
 
-export type Result<T> = Success<T> | Failure;
+// Thrown by all API methods when an operation fails. Errors from Redis itself are thrown as they are.
+export class RigidDBError extends Error {
+    readonly code: ErrorCode;
+    readonly method: Method;
+    declare readonly indexes?: string[];
+    declare readonly reason?: string;
 
-export type SetSchemaResult = Success<true> | { val: false; reason: string; method: 'setSchema' };
+    constructor(method: Method, code: ErrorCode, details: RigidDBErrorDetails = {}) {
+        const detail = details.reason ?? details.indexes?.join(', ');
+
+        super(`${method}() failed: ${code}${detail === undefined ? '' : ` (${detail})`}`);
+
+        this.name = 'RigidDBError';
+        this.code = code;
+        this.method = method;
+        Object.assign(this, details);
+    }
+}
 
 export type RedisConnectionOptions = Pick<RedisOptions, 'host' | 'port' | 'password' | 'db' | 'retryStrategy'>;
 
@@ -119,6 +131,7 @@ class Context {
     readonly params: string[] = [];
     script = '';
     error: { method: Method; err: ErrorCode } | null = null;
+    inTransaction = false;
     private depth = 0;
 
     // Appends Lua code. The common indentation of the snippet is replaced with the indentation of
@@ -203,61 +216,67 @@ export class RigidDB {
         return this.client.quit();
     }
 
-    async setSchema(schema: Schema): Promise<SetSchemaResult> {
+    async setSchema(schema: Schema): Promise<void> {
         await this.ensureSchema();
         return this.setSchemaNow(schema);
     }
 
-    async getSchema(): Promise<Result<{ revision: number; schema: Schema }>> {
+    async getSchema(): Promise<{ revision: number; schema: Schema }> {
         await this.ensureSchema();
 
-        return this.schema && this.srcSchema ?
-            { val: { revision: this.revision, schema: this.srcSchema } } :
-            { val: false, err: 'schemaMissing', method: 'getSchema' };
+        if (!this.schema || !this.srcSchema) {
+            throw new RigidDBError('getSchema', 'schemaMissing');
+        }
+
+        return { revision: this.revision, schema: this.srcSchema };
     }
 
-    create(collection: string, values: FieldValues): Promise<Result<number>> {
+    // Resolves to the id of the new record
+    create(collection: string, values: FieldValues): Promise<number> {
         return this.execSingle(this.createOp, 'create', collection, values);
     }
 
-    // Resolves to the number of fields that changed.
-    update(collection: string, id: RecordId, values: FieldValues): Promise<Result<number>> {
+    // Resolves to the number of fields that changed
+    update(collection: string, id: RecordId, values: FieldValues): Promise<number> {
         return this.execSingle(this.updateOp, 'update', collection, id, values);
     }
 
-    delete(collection: string, id: RecordId): Promise<Result<true>> {
+    delete(collection: string, id: RecordId): Promise<void> {
         return this.execSingle(this.deleteOp, 'delete', collection, id);
     }
 
-    get(collection: string, id: RecordId): Promise<Result<FieldValues>> {
+    get(collection: string, id: RecordId): Promise<FieldValues> {
         return this.execSingle(this.getOp, 'get', collection, id);
     }
 
-    exists(collection: string, id: RecordId): Promise<Result<boolean>> {
+    exists(collection: string, id: RecordId): Promise<boolean> {
         return this.execSingle(this.existsOp, 'exists', collection, id);
     }
 
-    list(collection: string): Promise<Result<number[]>> {
+    list(collection: string): Promise<number[]> {
         return this.execSingle(this.listOp, 'list', collection);
     }
 
-    count(collection: string): Promise<Result<number>> {
+    count(collection: string): Promise<number> {
         return this.execSingle(this.countOp, 'count', collection);
     }
 
-    currentId(collection: string): Promise<Result<number>> {
+    currentId(collection: string): Promise<number> {
         return this.execSingle(this.currentIdOp, 'currentId', collection);
     }
 
-    find(collection: string, query: FieldValues): Promise<Result<number[]>> {
+    find(collection: string, query: FieldValues): Promise<number[]> {
         return this.execSingle(this.findOp, 'find', collection, query);
     }
 
-    // Resolves to the return value of the last method in the transaction.
-    async transaction(cb: (tr: Transaction) => void): Promise<Result<unknown>> {
+    // Resolves to the return value of the last operation in the transaction. An exists() that
+    // finds no record aborts the transaction with notFound.
+    async transaction(cb: (tr: Transaction) => void): Promise<unknown> {
         await this.ensureSchema();
 
         const ctx = new Context();
+
+        ctx.inTransaction = true;
 
         if (this.invalidStoredSchema) {
             ctx.error = { method: 'transaction', err: 'invalidStoredSchema' };
@@ -339,9 +358,9 @@ export class RigidDB {
         }
     }
 
-    private async setSchemaNow(schema: Schema): Promise<SetSchemaResult> {
+    private async setSchemaNow(schema: Schema): Promise<void> {
         if (this.schema) {
-            return { val: false, reason: 'Schema already exists', method: 'setSchema' };
+            throw new RigidDBError('setSchema', 'schemaExists');
         }
 
         let srcSchemaJSON: string | undefined;
@@ -353,7 +372,7 @@ export class RigidDB {
         }
 
         if (srcSchemaJSON === undefined) {
-            return { val: false, reason: 'Invalid schema.', method: 'setSchema' };
+            throw new RigidDBError('setSchema', 'invalidSchema', { reason: 'Invalid schema.' });
         }
 
         // Work with a copy so that later changes to the caller's object don't leak in.
@@ -361,15 +380,13 @@ export class RigidDB {
         const ret = normalizeAndVerifySchema(srcSchema);
 
         if ('err' in ret) {
-            return { val: false, reason: ret.err, method: 'setSchema' };
+            throw new RigidDBError('setSchema', 'invalidSchema', { reason: ret.err });
         }
 
         this.srcSchema = srcSchema as Schema;
         this.schema = ret.schema;
 
         await this.client.set(`${this.keyPrefix}:_schema`, srcSchemaJSON);
-
-        return { val: true };
     }
 
     private async execSingle<T, A extends unknown[]>(
@@ -377,7 +394,7 @@ export class RigidDB {
         method: Method,
         collection: string,
         ...args: A
-    ): Promise<Result<T>> {
+    ): Promise<T> {
         await this.ensureSchema();
 
         const ctx = new Context();
@@ -390,7 +407,7 @@ export class RigidDB {
             this.runOp(ctx, op, method, collection, args);
         }
 
-        return this.exec(ctx) as Promise<Result<T>>;
+        return this.exec(ctx) as Promise<T>;
     }
 
     private runOp<A extends unknown[]>(ctx: Context, op: Op<A>, method: Method, collection: string, args: A): void {
@@ -406,9 +423,9 @@ export class RigidDB {
         ctx.lua('end');
     }
 
-    private async exec(ctx: Context): Promise<Result<unknown>> {
+    private async exec(ctx: Context): Promise<unknown> {
         if (ctx.error) {
-            return { val: false, err: ctx.error.err, method: ctx.error.method };
+            throw new RigidDBError(ctx.error.method, ctx.error.err);
         }
 
         const code = `${utilityFuncs()}\n\nlocal ret = { 'none', 'noError' }\n${ctx.script}return ret\n`;
@@ -434,33 +451,29 @@ export class RigidDB {
         return this.decodeResult(ret as ScriptReturn);
     }
 
-    private decodeResult([method, err, val, collection]: ScriptReturn): Result<unknown> {
+    private decodeResult([method, err, val, collection]: ScriptReturn): unknown {
         if (method === 'none') {
-            return { val: true };
+            return undefined;
         }
 
         if (err !== 'noError') {
-            if (method === 'create' || method === 'update') {
-                return { val: false, err, method, indexes: (val as string[] | undefined) ?? [] };
-            }
-
-            return { val: false, err, method };
+            throw new RigidDBError(method, err, err === 'notUnique' ? { indexes: val as string[] } : {});
         }
 
         switch (method) {
             case 'get':
-                return { val: this.processRedisGetReturnValue(collection as string, val as string[]) };
+                return this.processRedisGetReturnValue(collection as string, val as string[]);
             case 'exists':
-                return { val: val === 1 }; // Lua returns 0 (not found) or 1 (found)
+                return val === 1; // Lua returns 0 (not found) or 1 (found)
             case 'currentId':
-                return { val: parseInt(String(val), 10) };
+                return parseInt(String(val), 10);
             case 'list':
             case 'find':
-                return { val: (val as string[]).map(item => parseInt(item, 10)) };
+                return (val as string[]).map(item => parseInt(item, 10));
             case 'delete':
-                return { val: true };
+                return undefined;
             default:
-                return { val };
+                return val;
         }
     }
 
@@ -572,9 +585,12 @@ export class RigidDB {
     }
 
     private existsOp(ctx: Context, collection: string, id: RecordId): void {
+        // In a transaction, a missing record aborts the transaction
+        const missing = ctx.inTransaction ? `{ 'exists', 'notFound' }` : `{ 'exists', 'noError', 0 }`;
+
         ctx.lua(`
             local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
-            if redis.call("EXISTS", key) == 0 then return { 'exists', 'noError', 0 } end
+            if redis.call("EXISTS", key) == 0 then return ${missing} end
             ret = { 'exists', 'noError', 1 }
         `);
     }

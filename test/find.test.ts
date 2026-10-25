@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -56,11 +56,10 @@ describe('Find', function() {
     it('Fails if no index', function() {
         return store.find('car', {
             color: 'red'
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'unknownIndex',
-                method: 'find',
-                val: false
+                method: 'find'
             });
         });
     });
@@ -70,11 +69,10 @@ describe('Find', function() {
             color: 'white',
             mileage: null,
             convertible: false
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'find',
-                err: 'nullNotAllowed',
-                val: false
+                err: 'nullNotAllowed'
             });
         });
     });
@@ -85,9 +83,7 @@ describe('Find', function() {
             mileage: 12346,
             convertible: true
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: []
-            });
+            expect(result).to.deep.equal([]);
         });
     });
 
@@ -97,9 +93,7 @@ describe('Find', function() {
             mileage: 12345,
             convertible: true
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: [ 1, 2, 3 ]
-            });
+            expect(result).to.deep.equal([ 1, 2, 3 ]);
         });
     });
 
@@ -122,9 +116,7 @@ describe('Find', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: [ 4, 5 ]
-            });
+            expect(result).to.deep.equal([ 4, 5 ]);
         });
     });
 });

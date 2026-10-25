@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.0 (unreleased)
+
+### Breaking changes
+
+- Methods resolve to their value directly instead of a `{ val }` result object, and failures reject the promise with a `RigidDBError` that has `code`, `method`, and, when they apply, `indexes` and `reason`. `delete()` and `setSchema()` resolve to nothing.
+- `setSchema()` fails with the error codes `invalidSchema` (with the message in `reason`) and `schemaExists` instead of a `reason` result.
+- In a transaction, an `exists()` that finds no record fails the transaction with `notFound` instead of resolving to `false`.
+- The `Result`, `Success`, `Failure`, and `SetSchemaResult` types are removed.
+
 ## 1.0.0
 
 The API now uses the same terms as the documentation: records with fields, stored in collections and found through indexes.
