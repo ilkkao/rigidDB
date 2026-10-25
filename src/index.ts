@@ -18,18 +18,54 @@ export interface IndexField {
 
 export interface IndexDefinition {
     unique: boolean;
-    fields: (string | IndexField)[];
+    fields: readonly (string | IndexField)[];
 }
 
 export interface CollectionDefinition {
-    fields: Record<string, FieldType | FieldDefinition>;
-    indexes?: Record<string, IndexDefinition>;
+    fields: Readonly<Record<string, FieldType | FieldDefinition>>;
+    indexes?: Readonly<Record<string, IndexDefinition>>;
 }
 
-export type Schema = Record<string, CollectionDefinition>;
+export type Schema = Readonly<Record<string, CollectionDefinition>>;
 
 export type FieldValue = string | number | boolean | Date | null;
 export type FieldValues = Record<string, FieldValue>;
+
+// Returns the schema as it is. Lets TypeScript keep the literal types of the schema without
+// `as const`, for use as the type argument of RigidDB: new RigidDB<typeof schema>(...)
+export function defineSchema<const S extends Schema>(schema: S): S {
+    return schema;
+}
+
+export type CollectionName<S extends Schema> = keyof S & string;
+
+type FieldsOf<S extends Schema, C extends CollectionName<S>> = S[C]['fields'];
+
+type TypeOf<F> = F extends FieldType ? F : F extends { type: infer T extends FieldType } ? T : never;
+
+type ValueOf<T extends FieldType> =
+    T extends 'string' ? string : T extends 'int' ? number : T extends 'boolean' ? boolean : Date;
+
+type NullOf<F> = F extends { allowNull: false } ? never : null;
+
+// The field values of a record in collection C
+export type RecordOf<S extends Schema, C extends CollectionName<S>> = {
+    -readonly [K in keyof FieldsOf<S, C>]: ValueOf<TypeOf<FieldsOf<S, C>[K]>> | NullOf<FieldsOf<S, C>[K]>;
+};
+
+type IndexFieldName<F> = F extends string ? F : F extends { name: infer N extends string } ? N : never;
+
+type IndexesOf<S extends Schema, C extends CollectionName<S>> = NonNullable<S[C]['indexes']>;
+
+type IndexFieldsOf<S extends Schema, C extends CollectionName<S>, I extends keyof IndexesOf<S, C>> =
+    IndexFieldName<IndexesOf<S, C>[I]['fields'][number]> & keyof RecordOf<S, C>;
+
+// A find() query: values for exactly the fields of one of the indexes of collection C. The other
+// fields are typed never, so that a query can't mix the fields of two indexes.
+export type IndexQuery<S extends Schema, C extends CollectionName<S>> = {
+    [I in keyof IndexesOf<S, C>]: Pick<RecordOf<S, C>, IndexFieldsOf<S, C, I>> &
+        { [K in Exclude<keyof RecordOf<S, C>, IndexFieldsOf<S, C, I>>]?: never };
+}[keyof IndexesOf<S, C>];
 
 export type Method =
     | 'setSchema'
@@ -90,12 +126,12 @@ export type RedisConnectionOptions = Omit<RedisOptions, 'keyPrefix' | 'replyMapp
 // An existing ioredis client, a redis:// or rediss:// URL, or ioredis options
 export type Connection = Redis | string | RedisConnectionOptions;
 
-export interface Transaction {
-    create(collection: string, values: FieldValues): void;
-    update(collection: string, id: RecordId, values: FieldValues): void;
-    delete(collection: string, id: RecordId): void;
-    get(collection: string, id: RecordId): void;
-    exists(collection: string, id: RecordId): void;
+export interface Transaction<S extends Schema = Schema> {
+    create<C extends CollectionName<S>>(collection: C, values: RecordOf<S, C>): void;
+    update<C extends CollectionName<S>>(collection: C, id: RecordId, values: Partial<RecordOf<S, C>>): void;
+    delete(collection: CollectionName<S>, id: RecordId): void;
+    get(collection: CollectionName<S>, id: RecordId): void;
+    exists(collection: CollectionName<S>, id: RecordId): void;
 }
 
 export type RecordId = number | string;
@@ -170,7 +206,8 @@ type ScriptReturn = [Method | 'none', ErrorCode | 'noError', unknown?, string?];
 
 const FIELD_TYPES: readonly string[] = ['string', 'int', 'boolean', 'date', 'timestamp'];
 
-export class RigidDB {
+// S is the type of the schema. Without it, collections and values are checked only at runtime.
+export class RigidDB<S extends Schema = Schema> {
     readonly prefix: string;
     readonly revision: number;
     readonly client: Redis;
@@ -179,7 +216,7 @@ export class RigidDB {
     private readonly ownsClient: boolean;
     private invalidStoredSchema = false;
     private schema: NormalizedSchema | null = null;
-    private srcSchema: Schema | null = null;
+    private srcSchema: S | null = null;
     private schemaPromise: Promise<void> | null = null;
 
     constructor(
@@ -232,12 +269,12 @@ export class RigidDB {
         }
     }
 
-    async setSchema(schema: Schema): Promise<void> {
+    async setSchema(schema: S): Promise<void> {
         await this.ensureSchema();
         return this.setSchemaNow(schema);
     }
 
-    async getSchema(): Promise<{ revision: number; schema: Schema }> {
+    async getSchema(): Promise<{ revision: number; schema: S }> {
         await this.ensureSchema();
 
         if (!this.schema || !this.srcSchema) {
@@ -248,46 +285,46 @@ export class RigidDB {
     }
 
     // Resolves to the id of the new record
-    create(collection: string, values: FieldValues): Promise<number> {
+    create<C extends CollectionName<S>>(collection: C, values: RecordOf<S, C>): Promise<number> {
         return this.execSingle(this.createOp, 'create', collection, values);
     }
 
     // Resolves to the number of fields that changed
-    update(collection: string, id: RecordId, values: FieldValues): Promise<number> {
-        return this.execSingle(this.updateOp, 'update', collection, id, values);
+    update<C extends CollectionName<S>>(collection: C, id: RecordId, values: Partial<RecordOf<S, C>>): Promise<number> {
+        return this.execSingle(this.updateOp, 'update', collection, id, values as FieldValues);
     }
 
-    delete(collection: string, id: RecordId): Promise<void> {
+    delete(collection: CollectionName<S>, id: RecordId): Promise<void> {
         return this.execSingle(this.deleteOp, 'delete', collection, id);
     }
 
-    get(collection: string, id: RecordId): Promise<FieldValues> {
+    get<C extends CollectionName<S>>(collection: C, id: RecordId): Promise<RecordOf<S, C>> {
         return this.execSingle(this.getOp, 'get', collection, id);
     }
 
-    exists(collection: string, id: RecordId): Promise<boolean> {
+    exists(collection: CollectionName<S>, id: RecordId): Promise<boolean> {
         return this.execSingle(this.existsOp, 'exists', collection, id);
     }
 
-    list(collection: string): Promise<number[]> {
+    list(collection: CollectionName<S>): Promise<number[]> {
         return this.execSingle(this.listOp, 'list', collection);
     }
 
-    count(collection: string): Promise<number> {
+    count(collection: CollectionName<S>): Promise<number> {
         return this.execSingle(this.countOp, 'count', collection);
     }
 
-    currentId(collection: string): Promise<number> {
+    currentId(collection: CollectionName<S>): Promise<number> {
         return this.execSingle(this.currentIdOp, 'currentId', collection);
     }
 
-    find(collection: string, query: FieldValues): Promise<number[]> {
+    find<C extends CollectionName<S>>(collection: C, query: IndexQuery<S, C>): Promise<number[]> {
         return this.execSingle(this.findOp, 'find', collection, query);
     }
 
     // Resolves to the return value of the last operation in the transaction. An exists() that
     // finds no record aborts the transaction with notFound.
-    async transaction(cb: (tr: Transaction) => void): Promise<unknown> {
+    async transaction(cb: (tr: Transaction<S>) => void): Promise<unknown> {
         await this.ensureSchema();
 
         const ctx = new Context();
@@ -307,7 +344,7 @@ export class RigidDB {
 
             cb({
                 create: (collection, values) => execute(this.createOp, 'create', collection, values),
-                update: (collection, id, values) => execute(this.updateOp, 'update', collection, id, values),
+                update: (collection, id, values) => execute(this.updateOp, 'update', collection, id, values as FieldValues),
                 delete: (collection, id) => execute(this.deleteOp, 'delete', collection, id),
                 get: (collection, id) => execute(this.getOp, 'get', collection, id),
                 exists: (collection, id) => execute(this.existsOp, 'exists', collection, id)
@@ -318,7 +355,7 @@ export class RigidDB {
     }
 
     // Print is for debugging, doesn't scale currently
-    async debugPrint(collection: string): Promise<void> {
+    async debugPrint(collection: CollectionName<S>): Promise<void> {
         await this.ensureSchema();
 
         const data: Record<string, string>[] = [];
@@ -369,12 +406,12 @@ export class RigidDB {
         if ('err' in ret) {
             this.invalidStoredSchema = true;
         } else {
-            this.srcSchema = srcSchema as Schema;
+            this.srcSchema = srcSchema as S;
             this.schema = ret.schema;
         }
     }
 
-    private async setSchemaNow(schema: Schema): Promise<void> {
+    private async setSchemaNow(schema: S): Promise<void> {
         if (this.schema) {
             throw new RigidDBError('setSchema', 'schemaExists');
         }
@@ -399,7 +436,7 @@ export class RigidDB {
             throw new RigidDBError('setSchema', 'invalidSchema', { reason: ret.err });
         }
 
-        this.srcSchema = srcSchema as Schema;
+        this.srcSchema = srcSchema as S;
         this.schema = ret.schema;
 
         await this.client.set(`${this.keyPrefix}:_schema`, srcSchemaJSON);
