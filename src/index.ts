@@ -18,6 +18,8 @@ export interface IndexField {
 
 export interface IndexDefinition {
     unique: boolean;
+    // A range index has one int, date, or timestamp field and also answers range queries
+    range?: boolean;
     fields: readonly (string | IndexField)[];
 }
 
@@ -30,6 +32,28 @@ export type Schema = Readonly<Record<string, CollectionDefinition>>;
 
 export type FieldValue = string | number | boolean | Date | null;
 export type FieldValues = Record<string, FieldValue>;
+
+// Bounds of a range query on a range index field
+export interface Range<V> {
+    gt?: V;
+    gte?: V;
+    lt?: V;
+    lte?: V;
+}
+
+export interface FindOptions {
+    // Maximum number of results, all by default
+    limit?: number;
+    // Number of results to skip, 0 by default
+    offset?: number;
+    // Sort order of the results: by id, or by the field value for a range index. 'asc' by default.
+    order?: 'asc' | 'desc';
+}
+
+export interface FoundRecord<R> {
+    id: number;
+    record: R;
+}
 
 // Returns the schema as it is. Lets TypeScript keep the literal types of the schema without
 // `as const`, for use as the type argument of RigidDB: new RigidDB<typeof schema>(...)
@@ -60,10 +84,13 @@ type IndexesOf<S extends Schema, C extends CollectionName<S>> = NonNullable<S[C]
 type IndexFieldsOf<S extends Schema, C extends CollectionName<S>, I extends keyof IndexesOf<S, C>> =
     IndexFieldName<IndexesOf<S, C>[I]['fields'][number]> & keyof RecordOf<S, C>;
 
+// A range index field also accepts range bounds. Without a schema type, range may be true for any index.
+type QueryValue<V, I> = I extends { range?: infer R } ? (true extends R ? V | Range<Exclude<V, null>> : V) : V;
+
 // A find() query: values for exactly the fields of one of the indexes of collection C. The other
 // fields are typed never, so that a query can't mix the fields of two indexes.
 export type IndexQuery<S extends Schema, C extends CollectionName<S>> = {
-    [I in keyof IndexesOf<S, C>]: Pick<RecordOf<S, C>, IndexFieldsOf<S, C, I>> &
+    [I in keyof IndexesOf<S, C>]: { [K in IndexFieldsOf<S, C, I>]: QueryValue<RecordOf<S, C>[K], IndexesOf<S, C>[I]> } &
         { [K in Exclude<keyof RecordOf<S, C>, IndexFieldsOf<S, C, I>>]?: never };
 }[keyof IndexesOf<S, C>];
 
@@ -79,6 +106,8 @@ export type Method =
     | 'count'
     | 'currentId'
     | 'find'
+    | 'findRecords'
+    | 'getMany'
     | 'transaction';
 
 export type ErrorCode =
@@ -92,7 +121,8 @@ export type ErrorCode =
     | 'notFound'
     | 'notUnique'
     | 'invalidSchema'
-    | 'schemaExists';
+    | 'schemaExists'
+    | 'invalidQuery';
 
 export interface RigidDBErrorDetails {
     // Names of the violated unique indexes, set for notUnique
@@ -148,6 +178,7 @@ interface NormalizedIndexField {
 
 interface NormalizedIndex {
     unique: boolean;
+    range: boolean;
     fields: NormalizedIndexField[];
 }
 
@@ -164,6 +195,7 @@ interface RedisIndex {
     redisValue: string;
     fields: NormalizedIndexField[];
     unique: boolean;
+    range: boolean;
 }
 
 // Collects the Lua code and the parameters of a script
@@ -201,10 +233,11 @@ class Context {
 
 type Op<A extends unknown[]> = (ctx: Context, collection: string, ...args: A) => void;
 
-// Lua script return value: [ method, error code, value, collection ]
-type ScriptReturn = [Method | 'none', ErrorCode | 'noError', unknown?, string?];
+// Lua script return value: [ method, error code, value, collection, records ]
+type ScriptReturn = [Method | 'none', ErrorCode | 'noError', unknown?, string?, string[][]?];
 
 const FIELD_TYPES: readonly string[] = ['string', 'int', 'boolean', 'date', 'timestamp'];
+const RANGE_TYPES: readonly string[] = ['int', 'date', 'timestamp'];
 
 // S is the type of the schema. Without it, collections and values are checked only at runtime.
 export class RigidDB<S extends Schema = Schema> {
@@ -306,8 +339,13 @@ export class RigidDB<S extends Schema = Schema> {
         return this.execSingle(this.existsOp, 'exists', collection, id);
     }
 
-    list(collection: CollectionName<S>): Promise<number[]> {
-        return this.execSingle(this.listOp, 'list', collection);
+    list(collection: CollectionName<S>, options: FindOptions = {}): Promise<number[]> {
+        return this.execSingle(this.listOp, 'list', collection, options);
+    }
+
+    // Resolves to the records in the same order as the ids, with null for an id that doesn't exist
+    getMany<C extends CollectionName<S>>(collection: C, ids: readonly RecordId[]): Promise<(RecordOf<S, C> | null)[]> {
+        return this.execSingle(this.getManyOp, 'getMany', collection, ids);
     }
 
     count(collection: CollectionName<S>): Promise<number> {
@@ -318,8 +356,18 @@ export class RigidDB<S extends Schema = Schema> {
         return this.execSingle(this.currentIdOp, 'currentId', collection);
     }
 
-    find<C extends CollectionName<S>>(collection: C, query: IndexQuery<S, C>): Promise<number[]> {
-        return this.execSingle(this.findOp, 'find', collection, query);
+    // Resolves to the ids of the matching records
+    find<C extends CollectionName<S>>(collection: C, query: IndexQuery<S, C>, options: FindOptions = {}): Promise<number[]> {
+        return this.execSingle(this.findOp, 'find', collection, query as FieldQuery, options, false);
+    }
+
+    // Like find(), but resolves to the matching records and their ids
+    findRecords<C extends CollectionName<S>>(
+        collection: C,
+        query: IndexQuery<S, C>,
+        options: FindOptions = {}
+    ): Promise<FoundRecord<RecordOf<S, C>>[]> {
+        return this.execSingle(this.findOp, 'findRecords', collection, query as FieldQuery, options, true);
     }
 
     // Resolves to the return value of the last operation in the transaction. An exists() that
@@ -504,7 +552,7 @@ export class RigidDB<S extends Schema = Schema> {
         return this.decodeResult(ret as ScriptReturn);
     }
 
-    private decodeResult([method, err, val, collection]: ScriptReturn): unknown {
+    private decodeResult([method, err, val, collection, records]: ScriptReturn): unknown {
         if (method === 'none') {
             return undefined;
         }
@@ -523,6 +571,14 @@ export class RigidDB<S extends Schema = Schema> {
             case 'list':
             case 'find':
                 return (val as string[]).map(item => parseInt(item, 10));
+            case 'findRecords':
+                return (val as string[]).map((id, i) => ({
+                    id: parseInt(id, 10),
+                    record: this.processRedisGetReturnValue(collection as string, records?.[i] as string[])
+                }));
+            case 'getMany':
+                return (records as string[][]).map(record =>
+                    record.length === 0 ? null : this.processRedisGetReturnValue(collection as string, record));
             case 'delete':
                 return undefined;
             default:
@@ -560,7 +616,7 @@ export class RigidDB<S extends Schema = Schema> {
         `);
         this.addValuesVar(ctx, redisValues.val);
 
-        this.addIndexes(ctx, collection, 'create', true);
+        this.addIndexes(ctx, collection, 'create', true, this.rangeScores(collection, values));
 
         ctx.lua(`
             hset(key, values)
@@ -597,14 +653,15 @@ export class RigidDB<S extends Schema = Schema> {
         this.assertUniqueIndexesFree(ctx, this.genAllIndexes(collection), 'update');
 
         ctx.lua(`values = hgetall(key)`);
-        this.removeIndexes(ctx, collection);
+        // Range index entries are replaced by addIndexes() for the changed fields only
+        this.removeIndexes(ctx, collection, false);
 
         for (const [prop, ref] of argRefs) {
             ctx.lua(`values['${prop}'] = ${ref}`);
         }
 
         // Uniqueness was verified above, before anything was modified
-        this.addIndexes(ctx, collection, 'update', false);
+        this.addIndexes(ctx, collection, 'update', false, this.rangeScores(collection, values));
 
         ctx.lua(`
             hset(key, values)
@@ -620,7 +677,7 @@ export class RigidDB<S extends Schema = Schema> {
             local values = hgetall(key)
         `);
 
-        this.removeIndexes(ctx, collection);
+        this.removeIndexes(ctx, collection, true);
 
         ctx.lua(`
             redis.call('ZREM', '${this.keyPrefix}:${collection}:ids', id)
@@ -656,42 +713,143 @@ export class RigidDB<S extends Schema = Schema> {
         ctx.lua(`ret = { 'currentId', 'noError', redis.call('GET', '${this.keyPrefix}:${collection}:nextid') or 0 }`);
     }
 
-    private listOp(ctx: Context, collection: string): void {
-        ctx.lua(`ret = { 'list', 'noError', redis.call('ZRANGE', '${this.keyPrefix}:${collection}:ids', 0, -1) }`);
+    private listOp(ctx: Context, collection: string, options: FindOptions): void {
+        const range = this.rangeArgs(ctx, 'list', options, '-inf', '+inf');
+
+        if (range) {
+            ctx.lua(`ret = { 'list', 'noError', redis.call('ZRANGE', '${this.keyPrefix}:${collection}:ids', ${range}) }`);
+        }
     }
 
-    private findOp(ctx: Context, collection: string, values: FieldValues): void {
-        const indexes = this.requireCollectionSchema(collection).indexes;
-        const searchFields = Object.keys(values).toSorted().join();
-        const index = Object.values(indexes).find(candidate =>
-            candidate.fields.map(field => field.name).toSorted().join() === searchFields);
+    private getManyOp(ctx: Context, collection: string, ids: readonly RecordId[]): void {
+        ctx.lua(`
+            local records = {}
+            for i, id in ipairs({ ${ids.map(id => ctx.arg(id)).join(', ')} }) do
+                records[i] = redis.call('HGETALL', '${this.keyPrefix}:${collection}:' .. id)
+            end
+            ret = { 'getMany', 'noError', false, '${collection}', records }
+        `);
+    }
+
+    private findOp(ctx: Context, collection: string, query: FieldQuery, options: FindOptions, withRecords: boolean): void {
+        const method = withRecords ? 'findRecords' : 'find';
+        const indexes = Object.values(this.requireCollectionSchema(collection).indexes);
+        const fieldNames = Object.keys(query).toSorted().join();
+        const hasFields = (index: NormalizedIndex) => index.fields.map(field => field.name).toSorted().join() === fieldNames;
+        const exact = Object.values(query).every(value => !isRange(value));
+
+        // Exact values are looked up from an exact index when there is one, ranges need a range index
+        const index = indexes.find(candidate => exact && !candidate.range && hasFields(candidate)) ??
+            indexes.find(candidate => candidate.range && hasFields(candidate));
 
         if (!index) {
-            ctx.error = { method: 'find', err: 'unknownIndex' };
+            ctx.error = { method, err: 'unknownIndex' };
             return;
         }
-
-        const redisValues = this.toRedisValues(collection, values);
-
-        if ('err' in redisValues) {
-            ctx.error = { method: 'find', err: redisValues.err };
-            return;
-        }
-
-        this.addValuesVar(ctx, redisValues.val);
 
         const name = this.indexName(collection, index);
-        const prop = indexValues(index);
 
-        ctx.lua(`
-            local result = redis.call('HGET', '${name}', ${prop})
-            if result ~= false then
-                result = { result }
-            else
-                result = redis.call('SMEMBERS', '${name}:' .. ${prop})
-            end
-            ret = { 'find', 'noError', result }
-        `);
+        if (index.range) {
+            const [field] = index.fields as [NormalizedIndexField];
+            const bounds = toScoreBounds(this.requireCollectionSchema(collection).fields[field.name]!.type, query[field.name]);
+
+            if (typeof bounds === 'string') {
+                ctx.error = { method, err: bounds };
+                return;
+            }
+
+            const range = this.rangeArgs(ctx, method, options, bounds.min, bounds.max);
+
+            if (range) {
+                ctx.lua(`local result = redis.call('ZRANGE', '${name}', ${range})`);
+            }
+        } else {
+            const redisValues = this.toRedisValues(collection, query as FieldValues);
+
+            if ('err' in redisValues) {
+                ctx.error = { method, err: redisValues.err };
+                return;
+            }
+
+            const page = this.pageArgs(ctx, method, options);
+
+            if (!page) {
+                return;
+            }
+
+            this.addValuesVar(ctx, redisValues.val);
+
+            const prop = indexValues(index);
+
+            ctx.lua(`
+                local result = redis.call('HGET', '${name}', ${prop})
+                if result ~= false then
+                    result = { result }
+                else
+                    result = redis.call('SMEMBERS', '${name}:' .. ${prop})
+                end
+                table.sort(result, function (a, b) return tonumber(a) ${page.desc ? '>' : '<'} tonumber(b) end)
+                result = slice(result, tonumber(${page.offset}), tonumber(${page.count}))
+            `);
+        }
+
+        if (ctx.error) {
+            return;
+        }
+
+        if (withRecords) {
+            ctx.lua(`
+                local records = {}
+                for i, id in ipairs(result) do
+                    records[i] = redis.call('HGETALL', '${this.keyPrefix}:${collection}:' .. id)
+                end
+                ret = { 'findRecords', 'noError', result, '${collection}', records }
+            `);
+        } else {
+            ctx.lua(`ret = { 'find', 'noError', result }`);
+        }
+    }
+
+    // Returns ZRANGE ... BYSCORE arguments for the score range and paging options
+    private rangeArgs(ctx: Context, method: Method, options: FindOptions, min: string, max: string): string | null {
+        const page = this.pageArgs(ctx, method, options);
+
+        if (!page) {
+            return null;
+        }
+
+        const [start, stop] = page.desc ? [max, min] : [min, max];
+
+        return `${ctx.arg(start)}, ${ctx.arg(stop)}, 'BYSCORE', ${page.desc ? `'REV', ` : ''}'LIMIT', ${page.offset}, ${page.count}`;
+    }
+
+    private pageArgs(ctx: Context, method: Method, options: FindOptions): { offset: string; count: string; desc: boolean } | null {
+        const { limit, offset = 0, order = 'asc' } = options;
+
+        if (!isCount(offset) || (limit !== undefined && !isCount(limit)) || (order !== 'asc' && order !== 'desc')) {
+            ctx.error = { method, err: 'invalidQuery' };
+            return null;
+        }
+
+        // A negative count means all results
+        return { offset: ctx.arg(offset), count: ctx.arg(limit ?? -1), desc: order === 'desc' };
+    }
+
+    // Range index scores of the given values. Null removes the record from the range index.
+    private rangeScores(collection: string, values: FieldValues): Map<string, string | null> {
+        const scores = new Map<string, string | null>();
+
+        for (const index of Object.values(this.requireCollectionSchema(collection).indexes)) {
+            const [field] = index.fields as [NormalizedIndexField];
+
+            if (index.range && Object.hasOwn(values, field.name)) {
+                const value = values[field.name] as FieldValue;
+
+                scores.set(field.name, value === null ? null : String(value instanceof Date ? value.getTime() : value));
+            }
+        }
+
+        return scores;
     }
 
     private genAllIndexes(collection: string): RedisIndex[] {
@@ -703,14 +861,15 @@ export class RigidDB<S extends Schema = Schema> {
             redisKey: this.indexName(collection, index),
             redisValue: indexValues(index),
             fields: index.fields,
-            unique: index.unique
+            unique: index.unique,
+            range: index.range
         }));
     }
 
     private indexName(collection: string, index: NormalizedIndex): string {
         const fields = index.fields.map(field => field.name).toSorted().join(':');
 
-        return `${this.keyPrefix}:${collection}:i:${fields}`;
+        return `${this.keyPrefix}:${collection}:${index.range ? 'r' : 'i'}:${fields}`;
     }
 
     private assertUniqueIndexesFree(ctx: Context, indexes: RedisIndex[], method: Method): void {
@@ -733,14 +892,32 @@ export class RigidDB<S extends Schema = Schema> {
         ctx.lua(`if uniqueError then return { '${method}', 'notUnique', nonUniqueIndexes } end`);
     }
 
-    private addIndexes(ctx: Context, collection: string, method: Method, assertUniq: boolean): void {
+    private addIndexes(
+        ctx: Context,
+        collection: string,
+        method: Method,
+        assertUniq: boolean,
+        scores: Map<string, string | null>
+    ): void {
         const indexes = this.genAllIndexes(collection);
 
         if (assertUniq) {
             this.assertUniqueIndexesFree(ctx, indexes, method);
         }
 
-        for (const { redisKey, redisValue } of indexes) {
+        for (const { redisKey, redisValue, range, fields } of indexes) {
+            if (range) {
+                const score = scores.get((fields[0] as NormalizedIndexField).name);
+
+                if (score === null) {
+                    ctx.lua(`redis.call('ZREM', '${redisKey}', id)`);
+                } else if (score !== undefined) {
+                    ctx.lua(`redis.call('ZADD', '${redisKey}', ${ctx.arg(score)}, id)`);
+                }
+
+                continue;
+            }
+
             ctx.lua(`
                 do
                     local hashId = redis.call('HGET', '${redisKey}', ${redisValue})
@@ -758,8 +935,16 @@ export class RigidDB<S extends Schema = Schema> {
         }
     }
 
-    private removeIndexes(ctx: Context, collection: string): void {
-        for (const { redisKey, redisValue } of this.genAllIndexes(collection)) {
+    private removeIndexes(ctx: Context, collection: string, withRange: boolean): void {
+        for (const { redisKey, redisValue, range } of this.genAllIndexes(collection)) {
+            if (range) {
+                if (withRange) {
+                    ctx.lua(`redis.call('ZREM', '${redisKey}', id)`);
+                }
+
+                continue;
+            }
+
             ctx.lua(`
                 do
                     local removed = redis.call('HDEL', '${redisKey}', ${redisValue})
@@ -996,7 +1181,19 @@ function normalizeAndVerifySchema(schema: unknown): { schema: NormalizedSchema }
                 normalizedIndexFields.push({ name, caseInsensitive: !!field['caseInsensitive'] });
             }
 
-            normalizedIndexes[indexName] = { unique: index['unique'], fields: normalizedIndexFields };
+            const range = index['range'] ?? false;
+
+            if (typeof range !== 'boolean') {
+                return { err: 'Invalid index range definition' };
+            }
+
+            const [first, ...others] = normalizedIndexFields as [NormalizedIndexField, ...NormalizedIndexField[]];
+
+            if (range && (index['unique'] || others.length > 0 || !RANGE_TYPES.includes(normalizedFields[first.name]!.type))) {
+                return { err: `A range index must have one int, date, or timestamp field and can't be unique: '${indexName}'` };
+            }
+
+            normalizedIndexes[indexName] = { unique: index['unique'], range, fields: normalizedIndexFields };
         }
 
         normalized[collectionName] = { fields: normalizedFields, indexes: normalizedIndexes };
@@ -1038,6 +1235,61 @@ function indexValues(index: NormalizedIndex): string {
         .join(`..':'..`);
 }
 
+// A find() query value: an exact field value or the bounds of a range query
+type FieldQuery = Record<string, FieldValue | Range<number | Date>>;
+
+function isCount(value: unknown): boolean {
+    return Number.isInteger(value) && (value as number) >= 0;
+}
+
+function isRange(value: unknown): value is Range<unknown> {
+    return isObject(value) && !(value instanceof Date);
+}
+
+// Converts an exact value or range bounds to ZRANGE BYSCORE min and max, or to an error code
+function toScoreBounds(type: FieldType, value: unknown): { min: string; max: string } | ErrorCode {
+    const toScore = (bound: unknown) => {
+        if (type === 'int') {
+            return typeof bound === 'number' && Number.isFinite(bound) ? String(bound) : null;
+        }
+
+        return isValidDate(bound) ? String(bound.getTime()) : null;
+    };
+
+    if (!isRange(value)) {
+        // Range indexes don't contain nulls
+        const score = toScore(value);
+
+        return score === null ? (value === null ? 'invalidQuery' : 'wrongType') : { min: score, max: score };
+    }
+
+    const { gt, gte, lt, lte, ...unknownKeys } = value;
+
+    if (Object.keys(unknownKeys).length > 0 || (gt !== undefined && gte !== undefined) || (lt !== undefined && lte !== undefined)) {
+        return 'invalidQuery';
+    }
+
+    // Exclusive bounds are prefixed with ( in ZRANGE BYSCORE
+    const bound = (exclusive: unknown, inclusive: unknown, unbounded: string) => {
+        if (exclusive === undefined && inclusive === undefined) {
+            return unbounded;
+        }
+
+        const score = toScore(exclusive ?? inclusive);
+
+        if (score === null) {
+            return null;
+        }
+
+        return exclusive === undefined ? score : `(${score}`;
+    };
+
+    const min = bound(gt, gte, '-inf');
+    const max = bound(lt, lte, '+inf');
+
+    return min === null || max === null ? 'wrongType' : { min, max };
+}
+
 function isRedisClient(connection: Connection): connection is Redis {
     return typeof connection === 'object' && typeof (connection as Partial<Redis>).evalsha === 'function';
 }
@@ -1074,6 +1326,15 @@ function utilityFuncs(): string {
                 else
                     result[nextkey] = v
                 end
+            end
+            return result
+        end
+
+        local slice = function (list, offset, count)
+            local result = {}
+            for i = offset + 1, #list do
+                if count >= 0 and #result >= count then break end
+                table.insert(result, list[i])
             end
             return result
         end
