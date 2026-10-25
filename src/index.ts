@@ -84,7 +84,11 @@ export class RigidDBError extends Error {
     }
 }
 
-export type RedisConnectionOptions = Pick<RedisOptions, 'host' | 'port' | 'password' | 'db' | 'retryStrategy'>;
+// All ioredis options except keyPrefix, which the Lua scripts can't honor, and replyMapping
+export type RedisConnectionOptions = Omit<RedisOptions, 'keyPrefix' | 'replyMapping'>;
+
+// An existing ioredis client, a redis:// or rediss:// URL, or ioredis options
+export type Connection = Redis | string | RedisConnectionOptions;
 
 export interface Transaction {
     create(collection: string, values: FieldValues): void;
@@ -171,6 +175,8 @@ export class RigidDB {
     readonly revision: number;
     readonly client: Redis;
 
+    // A client passed in by the caller is left open by quit()
+    private readonly ownsClient: boolean;
     private invalidStoredSchema = false;
     private schema: NormalizedSchema | null = null;
     private srcSchema: Schema | null = null;
@@ -179,7 +185,7 @@ export class RigidDB {
     constructor(
         prefix: string,
         revision: number,
-        redisOpts: RedisConnectionOptions = {},
+        connection: Connection = {},
         redisErrorHandler?: (err: Error) => void
     ) {
         if (typeof prefix !== 'string' || !onlyLetters(prefix)) {
@@ -193,15 +199,22 @@ export class RigidDB {
         this.prefix = prefix;
         this.revision = revision;
 
-        const opts: RedisConnectionOptions = {};
-
-        for (const key of ['host', 'port', 'password', 'db', 'retryStrategy'] as const) {
-            if (redisOpts[key] !== undefined) {
-                Object.assign(opts, { [key]: redisOpts[key] });
-            }
+        // Duck typing instead of instanceof works also when the caller has another copy of ioredis
+        if (isRedisClient(connection)) {
+            this.client = connection;
+            this.ownsClient = false;
+        } else {
+            this.client = typeof connection === 'string' ? new Redis(connection) : new Redis(connection);
+            this.ownsClient = true;
         }
 
-        this.client = new Redis(opts);
+        if (this.client.options.keyPrefix) {
+            if (this.ownsClient) {
+                this.client.disconnect();
+            }
+
+            throw new Error('The keyPrefix option of ioredis is not supported, use the database name instead.');
+        }
 
         if (redisErrorHandler) {
             this.client.on('error', redisErrorHandler);
@@ -212,8 +225,11 @@ export class RigidDB {
         this.ensureSchema().catch(() => {});
     }
 
-    async quit(): Promise<'OK'> {
-        return this.client.quit();
+    // Closes the connection, unless the client was passed to the constructor
+    async quit(): Promise<void> {
+        if (this.ownsClient) {
+            await this.client.quit();
+        }
     }
 
     async setSchema(schema: Schema): Promise<void> {
@@ -983,6 +999,10 @@ function indexValues(index: NormalizedIndex): string {
             return `(string.gsub(${valueCode}, ':', '::'))`;
         })
         .join(`..':'..`);
+}
+
+function isRedisClient(connection: Connection): connection is Redis {
+    return typeof connection === 'object' && typeof (connection as Partial<Redis>).evalsha === 'function';
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

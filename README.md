@@ -77,7 +77,7 @@ CommonJS code can load the module with `require('rigiddb').default`.
 
 ## Connection API
 
-### new RigidDB(databaseName, revision, redisOptions, redisErrorHandler)
+### new RigidDB(databaseName, revision, connection, redisErrorHandler)
 
 Opens a connection to a database.
 
@@ -85,10 +85,14 @@ Opens a connection to a database.
 |-------------------|---------------------------------------------------------------|
 | databaseName      | Name of a new or existing database, letters only. Used as the prefix of all Redis keys. |
 | revision          | Schema revision number, an integer. |
-| redisOptions      | Optional. Connection options passed to `ioredis`. Supported options: `host`, `port`, `password`, `db`, and `retryStrategy`. |
+| connection        | Optional. An existing `ioredis` client, a `redis://` or `rediss://` URL, or [`ioredis` options](https://github.com/redis/ioredis). All options are supported except `keyPrefix`; use `databaseName` instead. Defaults to `localhost:6379`. |
 | redisErrorHandler | Optional. A function that is called with Redis connection errors. |
 
-Throws an `Error` if `databaseName` or `revision` is invalid.
+Throws an `Error` if `databaseName` or `revision` is invalid, or if the connection uses the `keyPrefix` option.
+
+```javascript
+const store = new RigidDB('mydb', 42, 'rediss://:password@redis.example.com:6380/0');
+```
 
 ## Database API
 
@@ -246,7 +250,7 @@ Use only with small collections during development.
 
 ### quit()
 
-Closes the database connection.
+Closes the database connection. A client passed to the constructor is left open.
 
 ## Supported data types
 
