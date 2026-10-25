@@ -24,20 +24,20 @@ describe('GetSchema', function() {
     it('Returns correct original schema', function() {
         return store.setSchema({
             cars: {
-                definition: {
+                fields: {
                     color: 'string',
                     year: 'int',
                     convertible: 'boolean',
                     purchaseDate: 'date',
                     created: 'timestamp'
                 },
-                indices: {
+                indexes: {
                     first: {
-                        uniq: true,
+                        unique: true,
                         fields: [ 'purchaseDate' ]
                     },
                     second: {
-                        uniq: false,
+                        unique: false,
                         fields: [ 'color', 'year', 'convertible' ]
                     }
                 }
@@ -49,20 +49,20 @@ describe('GetSchema', function() {
                 val: {
                     revision: 42, schema: {
                         cars: {
-                            definition: {
+                            fields: {
                                 color: 'string',
                                 year: 'int',
                                 convertible: 'boolean',
                                 purchaseDate: 'date',
                                 created: 'timestamp'
                             },
-                            indices: {
+                            indexes: {
                                 first: {
-                                    uniq: true,
+                                    unique: true,
                                     fields: [ 'purchaseDate' ]
                                 },
                                 second: {
-                                    uniq: false,
+                                    unique: false,
                                     fields: [ 'color', 'year', 'convertible' ]
                                 }
                             }

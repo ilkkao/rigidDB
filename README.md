@@ -19,23 +19,23 @@ const store = new RigidDB('mydb', 42);
 
 await store.setSchema({
     cars: {
-        definition: {
+        fields: {
             color: { type: 'string', allowNull: true },
             model: { type: 'string', allowNull: false },
             mileage: 'int', // Shorthand for { type: 'int', allowNull: true }
             convertible: 'boolean',
             purchaseDate: 'date'
         },
-        indices: {
+        indexes: {
             first: {
-                uniq: true,
+                unique: true,
                 fields: [
                     { name: 'model', caseInsensitive: true },
                     { name: 'color', caseInsensitive: false }
                 ]
             },
             second: {
-                uniq: false,
+                unique: false,
                 fields: [ 'color' ] // Shorthand for { name: 'color', caseInsensitive: false }
             }
         }
@@ -92,15 +92,15 @@ For example, `delete` can resolve to:
 }
 ```
 
-When `create` or `update` fails in Redis, the result object also has an `indices` property with the names of the violated unique indexes.
+When `create` or `update` fails in Redis, the result object also has an `indexes` property with the names of the violated unique indexes.
 
 | Error code          | Description                                                   |
 |---------------------|---------------------------------------------------------------|
 | `schemaMissing`     | No schema has been set for the database with `setSchema()`. |
-| `badSavedSchema`    | The schema stored in Redis is invalid. |
+| `invalidStoredSchema` | The schema stored in Redis is invalid. |
 | `unknownCollection` | The collection isn't defined in the schema. |
 | `unknownIndex`      | No index has exactly the fields given to `find()`. |
-| `badParameter`      | `create()` didn't get a value for every field in the schema. |
+| `missingFields`     | `create()` didn't get a value for every field in the schema. |
 | `nullNotAllowed`    | A field value is `null`, but the field is defined with `allowNull: false`. |
 | `wrongType`         | A field value doesn't match the field type in the schema. |
 | `notFound`          | No record with the given id exists. |
@@ -122,20 +122,20 @@ Unlike other methods, `setSchema()` reports an invalid schema with a `reason` pr
 
 Returns the schema definition set with `setSchema()`, as `{ revision, schema }`.
 
-### create(collection, attributes)
+### create(collection, values)
 
 Inserts a new record into a collection.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
-| attributes   | Values for all fields defined in the schema. |
+| values       | Values for all fields defined in the schema. |
 
 ##### Return value
 
 Id of the new record, an integer.
 
-### update(collection, id, attributes)
+### update(collection, id, values)
 
 Updates an existing record.
 
@@ -143,7 +143,7 @@ Updates an existing record.
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
 | id           | Id of the record to update. |
-| attributes   | Values of the fields to update. |
+| values       | Values of the fields to update. |
 
 ##### Return value
 
@@ -184,7 +184,7 @@ Returns the ids of all records in a collection.
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
 
-### size(collection)
+### count(collection)
 
 Returns the number of records in a collection.
 
@@ -200,9 +200,9 @@ Returns the id of the most recently created record in a collection, or 0 if no r
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
 
-### multi(transaction)
+### transaction(callback)
 
-Runs several operations as one transaction. The transaction function queues the operations, and they run together in a single Lua script, so the return value of one operation can't be used as an argument of the next.
+Runs several operations as one transaction. The callback queues the operations, and they run together in a single Lua script, so the return value of one operation can't be used as an argument of the next.
 
 The transaction is aborted at the first operation that fails, or at an `exists()` call that returns false. A typical transaction starts with `exists()` calls that check that the records a new record refers to still exist.
 
@@ -212,16 +212,16 @@ Resolves to the result of the last operation in the transaction.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
-| transaction  | A function that queues the operations on the transaction object it receives. |
+| callback     | A function that queues the operations on the transaction object it receives. |
 
-### find(collection, searchAttributes)
+### find(collection, query)
 
 Finds the ids of the records that match the given field values, using the index that has exactly those fields.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
-| searchAttributes | The field values to search for. |
+| query        | The field values to search for. |
 
 ### debugPrint(collection)
 

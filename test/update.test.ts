@@ -12,19 +12,19 @@ describe('Update', function() {
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: 'string',
                         mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
                         purchaseDate: { type: 'date', allowNull: true }
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }
@@ -50,7 +50,7 @@ describe('Update', function() {
                 method: 'update',
                 err: 'notFound',
                 val: false,
-                indices: []
+                indexes: []
             });
         });
     });
@@ -77,7 +77,7 @@ describe('Update', function() {
                 method: 'update',
                 err: 'notUnique',
                 val: false,
-                indices: [ 'first' ]
+                indexes: [ 'first' ]
             });
         });
     });

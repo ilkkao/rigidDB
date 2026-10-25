@@ -13,23 +13,23 @@ describe('Create', function() {
         }).then(function() {
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: { type: 'string', allowNull: true },
                         mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
                         purchaseDate: 'timestamp'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         },
                         third: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'mileage', 'color' ]
                         }
                     }
@@ -64,7 +64,7 @@ describe('Create', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'create',
-                err: 'badParameter',
+                err: 'missingFields',
                 val: false
             });
         });
@@ -92,7 +92,7 @@ describe('Create', function() {
                 method: 'create',
                 err: 'notUnique',
                 val: false,
-                indices: [ 'first', 'third' ]
+                indexes: [ 'first', 'third' ]
             });
         });
     });
@@ -126,15 +126,15 @@ describe('Create', function() {
 
         return store.setSchema({
             car: {
-                definition: {
+                fields: {
                     color: { type: 'string', allowNull: true },
                     mileage: { type: 'int', allowNull: false },
                     convertible: 'boolean',
                     purchaseDate: 'date'
                 },
-                indices: {
+                indexes: {
                     third: {
-                        uniq: true,
+                        unique: true,
                         fields: [ 'mileage', { name: 'color', caseInsensitive: true } ]
                     }
                 }
@@ -163,7 +163,7 @@ describe('Create', function() {
             }).then(function(createResult) {
                 expect(createResult).to.deep.equal({
                     err: 'notUnique',
-                    indices: [ 'third' ],
+                    indexes: [ 'third' ],
                     method: 'create',
                     val: false
                 });
@@ -215,20 +215,20 @@ describe('Create', function() {
         });
     });
 
-    it('Redis is updated correctly when indices change from hash to set', function() {
+    it('Redis is updated correctly when indexes change from hash to set', function() {
         store = new RigidDB('bar', 42, redisOpts);
 
         return store.setSchema({
             car: {
-                definition: {
+                fields: {
                     color: { type: 'string', allowNull: true },
                     mileage: { type: 'int', allowNull: false },
                     convertible: 'boolean',
                     purchaseDate: 'date'
                 },
-                indices: {
+                indexes: {
                     first: {
-                        uniq: false,
+                        unique: false,
                         fields: [ 'mileage' ]
                     }
                 }

@@ -11,7 +11,7 @@ describe('CurrentId', function() {
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: 'string'
                     }
                 }

@@ -4,26 +4,26 @@ import { redisClient, redisOpts } from './helpers.ts';
 
 let store: RigidDB;
 
-describe('Size', function() {
+describe('Count', function() {
     beforeEach(function() {
         store = new RigidDB('foo', 42, redisOpts);
 
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: 'string',
                         mileage: 'int',
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }
@@ -32,7 +32,7 @@ describe('Size', function() {
         });
     });
 
-    it('Get size', function() {
+    it('Get count', function() {
         return store.create('car', {
             color: 'blue',
             mileage: 12345,
@@ -46,7 +46,7 @@ describe('Size', function() {
                 purchaseDate: new Date('Sun Nov 20 2015 07:41:24 GMT+0100 (CET)')
             });
         }).then(function() {
-            return store.size('car');
+            return store.count('car');
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: 2
@@ -54,19 +54,19 @@ describe('Size', function() {
         });
     });
 
-    it('Get size for empty collection', function() {
-        return store.size('car').then(function(result) {
+    it('Get count for empty collection', function() {
+        return store.count('car').then(function(result) {
             expect(result).to.deep.equal({
                 val: 0
             });
         });
     });
 
-    it('Get size for invalid type', function() {
-        return store.size('bikes').then(function(result) {
+    it('Get count for invalid type', function() {
+        return store.count('bikes').then(function(result) {
             expect(result).to.deep.equal({
                 err: 'unknownCollection',
-                method: 'size',
+                method: 'count',
                 val: false
             });
         });

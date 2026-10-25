@@ -4,26 +4,26 @@ import { redisClient, redisOpts } from './helpers.ts';
 
 let store: RigidDB;
 
-describe('Multi', function() {
+describe('Transaction', function() {
     beforeEach(function() {
         store = new RigidDB('foo', 42, redisOpts);
 
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: 'string',
                         mileage: 'int',
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }
@@ -32,28 +32,28 @@ describe('Multi', function() {
         });
     });
 
-    it('empty multi', function() {
-        return store.multi(function() {}).then(function(result) {
+    it('empty transaction', function() {
+        return store.transaction(function() {}).then(function(result) {
             expect(result).to.deep.equal({
                 val: true
             });
         });
     });
 
-    it('multi containing invalid create', function() {
-        return store.multi(function(tr) {
+    it('transaction containing invalid create', function() {
+        return store.transaction(function(tr) {
             tr.create('car', { color: 'black' });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'badParameter',
+                err: 'missingFields',
                 val: false,
                 method: 'create'
             });
         });
     });
 
-    it('multi', function() {
-        return store.multi(function(tr) {
+    it('transaction', function() {
+        return store.transaction(function(tr) {
             tr.create('car', {
                 color: 'red',
                 mileage: 42,
@@ -106,7 +106,7 @@ describe('Multi', function() {
     });
 
     it('create delete', function() {
-        return store.multi(function(tr) {
+        return store.transaction(function(tr) {
             tr.create('car', {
                 color: 'red',
                 mileage: 42,
@@ -125,8 +125,8 @@ describe('Multi', function() {
         });
     });
 
-    it('failed exists cancels multi', function() {
-        return store.multi(function(tr) {
+    it('failed exists cancels transaction', function() {
+        return store.transaction(function(tr) {
             tr.exists('car', 1);
             tr.create('car', {
                 color: 'red',
@@ -145,8 +145,8 @@ describe('Multi', function() {
         });
     });
 
-    it('failed create cancels multi', function() {
-        return store.multi(function(tr) {
+    it('failed create cancels transaction', function() {
+        return store.transaction(function(tr) {
             tr.create('bikes', {
                 color: 'red',
                 mileage: 42,
@@ -172,12 +172,12 @@ describe('Multi', function() {
         });
     });
 
-    it('multi before setSchema fails', function() {
+    it('transaction before setSchema fails', function() {
         store = new RigidDB('bar', 42, redisOpts);
 
-        return store.multi(function() {}).then(function(result) {
+        return store.transaction(function() {}).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'multi',
+                method: 'transaction',
                 err: 'schemaMissing',
                 val: false
             });

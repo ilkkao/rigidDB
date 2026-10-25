@@ -1,10 +1,10 @@
 import { expect } from 'chai';
-import { RigidDB, type Attributes } from '../src/index.ts';
+import { RigidDB, type FieldValues } from '../src/index.ts';
 import { redisClient, redisOpts } from './helpers.ts';
 
 let store: RigidDB;
 
-const validCar: Attributes = { model: 'a', mileage: 1, convertible: true };
+const validCar: FieldValues = { model: 'a', mileage: 1, convertible: true };
 
 describe('Errors', function() {
     beforeEach(async function() {
@@ -12,7 +12,7 @@ describe('Errors', function() {
         store = new RigidDB('foo', 42, redisOpts);
         await store.setSchema({
             car: {
-                definition: {
+                fields: {
                     model: 'string',
                     mileage: 'int',
                     convertible: 'boolean'
@@ -50,13 +50,13 @@ describe('Errors', function() {
         });
     }
 
-    it('Non-object indices definition is rejected', async function() {
+    it('Non-object indexes definition is rejected', async function() {
         const fresh = new RigidDB('bar', 42, redisOpts);
 
         // @ts-expect-error: invalid input on purpose
-        expect(await fresh.setSchema({ car: { definition: { model: 'string' }, indices: [] } })).to.deep.equal({
+        expect(await fresh.setSchema({ car: { fields: { model: 'string' }, indexes: [] } })).to.deep.equal({
             method: 'setSchema',
-            reason: 'Invalid indices definition.',
+            reason: 'Invalid indexes definition.',
             val: false
         });
     });
@@ -65,7 +65,7 @@ describe('Errors', function() {
         const fresh = new RigidDB('bar', 42, redisOpts);
 
         // @ts-expect-error: invalid input on purpose
-        expect(await fresh.setSchema({ car: { definition: { model: 'string' }, indices: { first: { uniq: true, fields: [ 5 ] } } } }))
+        expect(await fresh.setSchema({ car: { fields: { model: 'string' }, indexes: { first: { unique: true, fields: [ 5 ] } } } }))
             .to.deep.equal({
                 method: 'setSchema',
                 reason: 'Invalid or missing index fields definition',

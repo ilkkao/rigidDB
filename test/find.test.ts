@@ -11,19 +11,19 @@ describe('Find', function() {
 
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: { type: 'string', allowNull: true },
                         mileage: { type: 'int', allowNull: false },
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate', 'color' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }

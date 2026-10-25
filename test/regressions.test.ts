@@ -8,14 +8,14 @@ const fresh = () => new RigidDB('bar', 42, redisOpts);
 
 const makeSchema = (): { car: CollectionDefinition } => ({
     car: {
-        definition: {
+        fields: {
             model: 'string',
             mileage: 'int',
             purchaseDate: 'date'
         },
-        indices: {
+        indexes: {
             date: {
-                uniq: false,
+                unique: false,
                 fields: [ 'purchaseDate' ]
             }
         }
@@ -69,15 +69,15 @@ describe('Regressions', function() {
         });
     });
 
-    it('Long multi does not run out of Lua local variables', async function() {
-        const result = await store.multi(function(tr) {
+    it('Long transaction does not run out of Lua local variables', async function() {
+        const result = await store.transaction(function(tr) {
             for (let i = 0; i < 100; i++) {
                 tr.create('car', { model: `m${i}`, mileage: i, purchaseDate: null });
             }
         });
 
         expect(result).to.deep.equal({ val: 100 });
-        expect(await store.size('car')).to.deep.equal({ val: 100 });
+        expect(await store.count('car')).to.deep.equal({ val: 100 });
     });
 
     it('Object.prototype properties are not collections', async function() {
@@ -93,21 +93,21 @@ describe('Regressions', function() {
 
         store = new RigidDB('bar', 42, redisOpts);
         await store.setSchema(srcSchema);
-        srcSchema.car.definition['model'] = 'int';
+        srcSchema.car.fields['model'] = 'int';
 
         const result = unwrap(await store.getSchema());
-        expect(result.schema['car']?.definition['model']).to.equal('string');
+        expect(result.schema['car']?.fields['model']).to.equal('string');
     });
 
     it('Invalid collection and index names are rejected', async function() {
-        expect(await fresh().setSchema({ "car'": { definition: { model: 'string' } } })).to.deep.equal({
+        expect(await fresh().setSchema({ "car'": { fields: { model: 'string' } } })).to.deep.equal({
             method: 'setSchema',
             reason: 'Invalid collection name (letters, numbers, and dashes allowed): \'car\'\'',
             val: false
         });
 
         expect(await fresh().setSchema({
-            car: { definition: { model: 'string' }, indices: { 'a:b': { uniq: true, fields: [ 'model' ] } } }
+            car: { fields: { model: 'string' }, indexes: { 'a:b': { unique: true, fields: [ 'model' ] } } }
         })).to.deep.equal({
             method: 'setSchema',
             reason: 'Invalid index name (letters, numbers, and dashes allowed): \'a:b\'',
@@ -117,7 +117,7 @@ describe('Regressions', function() {
         // @ts-expect-error: invalid input on purpose
         expect(await fresh().setSchema({ car: null })).to.deep.equal({
             method: 'setSchema',
-            reason: 'Definition missing.',
+            reason: 'Fields missing.',
             val: false
         });
     });
