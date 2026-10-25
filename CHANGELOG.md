@@ -8,6 +8,11 @@
 - `setSchema()` fails with the error codes `invalidSchema` (with the message in `reason`) and `schemaExists` instead of a `reason` result.
 - In a transaction, an `exists()` that finds no record fails the transaction with `notFound` instead of resolving to `false`.
 - The `Result`, `Success`, `Failure`, and `SetSchemaResult` types are removed.
+- `quit()` resolves to nothing, and leaves a client passed to the constructor open.
+
+### New features
+
+- The third constructor argument can be an existing ioredis client, a `redis://` or `rediss://` URL, or any ioredis options, such as `username`, `tls`, or `sentinels`. The `keyPrefix` option is rejected, because the Lua scripts can't honor it.
 
 ## 1.0.0
 
