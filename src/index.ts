@@ -262,7 +262,7 @@ export class RigidDB {
 
         const data: Record<string, string>[] = [];
 
-        if (this.schema?.[collection]) {
+        if (this.collectionSchema(collection)) {
             const ids = await this.client.zrange(`${this.keyPrefix}:${collection}:ids`, 0, '-1');
 
             for (const id of ids) {
@@ -423,7 +423,7 @@ export class RigidDB {
 
         switch (method) {
             case 'get':
-                return { val: this.processRedisGetReturnValue(collection ?? '', val as string[]) };
+                return { val: this.processRedisGetReturnValue(collection as string, val as string[]) };
             case 'exists':
                 return { val: val === 1 }; // Lua returns 0 (not found) or 1 (found)
             case 'currentId':
@@ -439,17 +439,12 @@ export class RigidDB {
     }
 
     private collectionSchema(collection: string): NormalizedCollection | undefined {
-        return Object.hasOwn(this.schema ?? {}, collection) ? this.schema?.[collection] : undefined;
+        return this.schema && Object.hasOwn(this.schema, collection) ? this.schema[collection] : undefined;
     }
 
+    // Only called after runOp() or debugPrint() has checked that the collection exists
     private requireCollectionSchema(collection: string): NormalizedCollection {
-        const schema = this.collectionSchema(collection);
-
-        if (!schema) {
-            throw new Error(`Unknown collection: '${collection}'`);
-        }
-
-        return schema;
+        return this.collectionSchema(collection)!;
     }
 
     private createOp(ctx: Context, collection: string, attrs: Attributes): void {
@@ -900,7 +895,8 @@ function normalizeAndVerifySchema(schema: unknown): { schema: NormalizedSchema }
 
 function indexValues(index: NormalizedIndex): string {
     return index.fields
-        .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        // Same order as the default sort in indexName(). Duplicate names produce identical code.
+        .toSorted((a, b) => (a.name < b.name ? -1 : 1))
         .map(field => {
             let valueCode = `values["${field.name}"]`;
 

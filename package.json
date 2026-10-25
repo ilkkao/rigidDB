@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings",
     "test": "mocha",
-    "coverage": "c8 --reporter=lcov --reporter=text mocha",
+    "coverage": "c8 mocha",
     "prepack": "npm run build"
   },
   "repository": {
