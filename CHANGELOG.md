@@ -12,6 +12,7 @@
 
 ### New features
 
+- `RigidDB` takes the type of the schema as a type argument. Collection names, the values given to `create()`, `update()`, and transactions, the records returned by `get()`, and `find()` queries are then checked at compile time. `defineSchema()` keeps the literal types of a schema, and `RecordOf<S, C>` is the type of a record.
 - The third constructor argument can be an existing ioredis client, a `redis://` or `rediss://` URL, or any ioredis options, such as `username`, `tls`, or `sentinels`. The `keyPrefix` option is rejected, because the Lua scripts can't honor it.
 
 ## 1.0.0
