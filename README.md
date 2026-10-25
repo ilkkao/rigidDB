@@ -260,13 +260,29 @@ Returns the id of the most recently created record in a collection, or 0 if no r
 
 ### transaction(callback)
 
-Runs several operations as one transaction. The callback queues the operations, and they run together in a single Lua script, so the return value of one operation can't be used as an argument of the next.
+Runs several operations as one atomic transaction. The callback queues `create()`, `update()`, `delete()`, `get()`, and `exists()` operations on the transaction object it receives, and they run together in a single Lua script.
 
-The transaction is aborted at the first operation that fails. In a transaction, an `exists()` that finds no record fails with `notFound`. A typical transaction starts with `exists()` calls that check that the records a new record refers to still exist.
+The transaction is all or nothing. If an operation fails, for example with `notFound` or `notUnique`, or Redis returns an error, the changes made by the operations before it are rolled back and the promise is rejected. In a transaction, an `exists()` that finds no record fails with `notFound`, so it can check that the records a new record refers to still exist.
 
-Aborting doesn't roll back. Redis doesn't undo the writes of a Lua script, so when an operation fails in Redis (for example with `notFound` or `notUnique`), the changes made by the operations before it are kept. Put the checks first.
+`create()` returns a reference to the new record, which later operations of the same transaction can use as the id.
 
-Resolves to the result of the last operation in the transaction.
+Resolves to an array with the result of each operation, in order.
+
+```javascript
+const [ id, changed, car ] = await store.transaction(tr => {
+    const ref = tr.create('cars', {
+        color: 'red',
+        model: 'coupe',
+        mileage: 0,
+        convertible: true,
+        purchaseDate: null
+    });
+
+    tr.update('cars', ref, { mileage: 10 });
+    tr.get('cars', ref);
+});
+// id is the id of the new car, changed = 1, car.mileage = 10
+```
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|

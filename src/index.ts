@@ -156,12 +156,34 @@ export type RedisConnectionOptions = Omit<RedisOptions, 'keyPrefix' | 'replyMapp
 // An existing ioredis client, a redis:// or rediss:// URL, or ioredis options
 export type Connection = Redis | string | RedisConnectionOptions;
 
+// The operations of a transaction. They are queued and run when the callback returns.
 export interface Transaction<S extends Schema = Schema> {
-    create<C extends CollectionName<S>>(collection: C, values: RecordOf<S, C>): void;
-    update<C extends CollectionName<S>>(collection: C, id: RecordId, values: Partial<RecordOf<S, C>>): void;
-    delete(collection: CollectionName<S>, id: RecordId): void;
-    get(collection: CollectionName<S>, id: RecordId): void;
-    exists(collection: CollectionName<S>, id: RecordId): void;
+    // Returns a reference that later operations of the same transaction can use as the id
+    create<C extends CollectionName<S>>(collection: C, values: RecordOf<S, C>): RecordRef;
+    update<C extends CollectionName<S>>(collection: C, id: RecordId | RecordRef, values: Partial<RecordOf<S, C>>): void;
+    delete(collection: CollectionName<S>, id: RecordId | RecordRef): void;
+    get(collection: CollectionName<S>, id: RecordId | RecordRef): void;
+    exists(collection: CollectionName<S>, id: RecordId | RecordRef): void;
+}
+
+// Refers to the record that a create() earlier in the same transaction creates
+export class RecordRef {
+    readonly #transaction: object;
+    readonly #index: number;
+
+    constructor(transaction: object, index: number) {
+        this.#transaction = transaction;
+        this.#index = index;
+    }
+
+    // The Lua expression for the id of the record
+    luaId(transaction: object): string {
+        if (transaction !== this.#transaction) {
+            throw new Error('A RecordRef can only be used in the transaction that created it.');
+        }
+
+        return `tostring(created[${this.#index}])`;
+    }
 }
 
 export type RecordId = number | string;
@@ -204,6 +226,8 @@ class Context {
     script = '';
     error: { method: Method; err: ErrorCode } | null = null;
     inTransaction = false;
+    // Number of create() operations in the transaction
+    createCount = 0;
     private depth = 0;
 
     // Appends Lua code. The common indentation of the snippet is replaced with the indentation of
@@ -223,6 +247,11 @@ class Context {
         this.depth--;
     }
 
+    // Returns the Lua expression for a record id
+    id(value: RecordId | RecordRef): string {
+        return value instanceof RecordRef ? value.luaId(this) : this.arg(value);
+    }
+
     // Passes the value to the script as a parameter and returns the Lua expression referring to it
     arg(value: RecordId): string {
         this.params.push(String(value));
@@ -234,7 +263,7 @@ class Context {
 type Op<A extends unknown[]> = (ctx: Context, collection: string, ...args: A) => void;
 
 // Lua script return value: [ method, error code, value, collection, records ]
-type ScriptReturn = [Method | 'none', ErrorCode | 'noError', unknown?, string?, string[][]?];
+type ScriptReturn = [Method, ErrorCode | 'noError', unknown?, string?, string[][]?];
 
 const FIELD_TYPES: readonly string[] = ['string', 'int', 'boolean', 'date', 'timestamp'];
 const RANGE_TYPES: readonly string[] = ['int', 'date', 'timestamp'];
@@ -370,9 +399,9 @@ export class RigidDB<S extends Schema = Schema> {
         return this.execSingle(this.findOp, 'findRecords', collection, query as FieldQuery, options, true);
     }
 
-    // Resolves to the return value of the last operation in the transaction. An exists() that
-    // finds no record aborts the transaction with notFound.
-    async transaction(cb: (tr: Transaction<S>) => void): Promise<unknown> {
+    // Resolves to the results of the operations, in order. If an operation fails, the changes of
+    // the transaction are rolled back. An exists() that finds no record fails with notFound.
+    async transaction(cb: (tr: Transaction<S>) => void): Promise<unknown[]> {
         await this.ensureSchema();
 
         const ctx = new Context();
@@ -391,7 +420,10 @@ export class RigidDB<S extends Schema = Schema> {
             };
 
             cb({
-                create: (collection, values) => execute(this.createOp, 'create', collection, values),
+                create: (collection, values) => {
+                    execute(this.createOp, 'create', collection, values);
+                    return new RecordRef(ctx, ctx.createCount);
+                },
                 update: (collection, id, values) => execute(this.updateOp, 'update', collection, id, values as FieldValues),
                 delete: (collection, id) => execute(this.deleteOp, 'delete', collection, id),
                 get: (collection, id) => execute(this.getOp, 'get', collection, id),
@@ -399,7 +431,7 @@ export class RigidDB<S extends Schema = Schema> {
             });
         }
 
-        return this.exec(ctx);
+        return this.exec(ctx) as Promise<unknown[]>;
     }
 
     // Print is for debugging, doesn't scale currently
@@ -522,6 +554,10 @@ export class RigidDB<S extends Schema = Schema> {
         ctx.lua('do');
         ctx.indented(() => op.call(this, ctx, collection, ...args));
         ctx.lua('end');
+
+        if (ctx.inTransaction) {
+            ctx.lua('table.insert(results, ret)');
+        }
     }
 
     private async exec(ctx: Context): Promise<unknown> {
@@ -529,7 +565,26 @@ export class RigidDB<S extends Schema = Schema> {
             throw new RigidDBError(ctx.error.method, ctx.error.err);
         }
 
-        const code = `${utilityFuncs()}\n\nlocal ret = { 'none', 'noError' }\n${ctx.script}return ret\n`;
+        const body = `local ret\n${ctx.script}return ${ctx.inTransaction ? `{ 'transaction', 'noError', results }` : 'ret'}`;
+
+        // A failing redis.call() raises a Lua error. It's caught to roll back the changes made so far.
+        const code = [
+            utilityFuncs(),
+            '',
+            'local created, results = {}, {}',
+            '',
+            'local ok, reply = pcall(function ()',
+            ...body.split('\n').map(line => `    ${line}`.trimEnd()),
+            'end)',
+            '',
+            'if not ok then',
+            '    rollback()',
+            '    error(reply)',
+            'end',
+            '',
+            'return reply',
+            ''
+        ].join('\n');
         const sha1 = createHash('sha1').update(code).digest('hex');
 
         debug(`PARAMETERS : ${ctx.params.join(', ')}`);
@@ -553,10 +608,6 @@ export class RigidDB<S extends Schema = Schema> {
     }
 
     private decodeResult([method, err, val, collection, records]: ScriptReturn): unknown {
-        if (method === 'none') {
-            return undefined;
-        }
-
         if (err !== 'noError') {
             throw new RigidDBError(method, err, err === 'notUnique' ? { indexes: val as string[] } : {});
         }
@@ -581,6 +632,8 @@ export class RigidDB<S extends Schema = Schema> {
                     record.length === 0 ? null : this.processRedisGetReturnValue(collection as string, record));
             case 'delete':
                 return undefined;
+            case 'transaction':
+                return (val as ScriptReturn[]).map(result => this.decodeResult(result));
             default:
                 return val;
         }
@@ -611,7 +664,7 @@ export class RigidDB<S extends Schema = Schema> {
         }
 
         ctx.lua(`
-            local id = redis.call('INCR', '${this.keyPrefix}:${collection}:nextid')
+            local id = w_incr('${this.keyPrefix}:${collection}:nextid')
             local key = '${this.keyPrefix}:${collection}:' .. id
         `);
         this.addValuesVar(ctx, redisValues.val);
@@ -619,13 +672,17 @@ export class RigidDB<S extends Schema = Schema> {
         this.addIndexes(ctx, collection, 'create', true, this.rangeScores(collection, values));
 
         ctx.lua(`
-            hset(key, values)
-            redis.call('ZADD', '${this.keyPrefix}:${collection}:ids', id, id)
+            w_hset(key, values)
+            w_zadd('${this.keyPrefix}:${collection}:ids', id, id)
             ret = { 'create', 'noError', id }
         `);
+
+        if (ctx.inTransaction) {
+            ctx.lua(`created[${++ctx.createCount}] = id`);
+        }
     }
 
-    private updateOp(ctx: Context, collection: string, id: RecordId, values: FieldValues): void {
+    private updateOp(ctx: Context, collection: string, id: RecordId | RecordRef, values: FieldValues): void {
         const redisValues = this.toRedisValues(collection, values);
 
         if ('err' in redisValues) {
@@ -634,9 +691,9 @@ export class RigidDB<S extends Schema = Schema> {
         }
 
         ctx.lua(`
-            local id = ${ctx.arg(id)}
+            local id = ${ctx.id(id)}
             local key = '${this.keyPrefix}:${collection}:' .. id
-            if redis.call("EXISTS", key) == 0 then return { 'update', 'notFound' } end
+            if redis.call("EXISTS", key) == 0 then return abort({ 'update', 'notFound' }) end
             local values = hgetall(key)
             local chg = 0
         `);
@@ -664,42 +721,42 @@ export class RigidDB<S extends Schema = Schema> {
         this.addIndexes(ctx, collection, 'update', false, this.rangeScores(collection, values));
 
         ctx.lua(`
-            hset(key, values)
+            w_hset(key, values)
             ret = { 'update', 'noError', chg }
         `);
     }
 
-    private deleteOp(ctx: Context, collection: string, id: RecordId): void {
+    private deleteOp(ctx: Context, collection: string, id: RecordId | RecordRef): void {
         ctx.lua(`
-            local id = ${ctx.arg(id)}
+            local id = ${ctx.id(id)}
             local key = '${this.keyPrefix}:${collection}:' .. id
-            if redis.call("EXISTS", key) == 0 then return { 'delete', 'notFound' } end
+            if redis.call("EXISTS", key) == 0 then return abort({ 'delete', 'notFound' }) end
             local values = hgetall(key)
         `);
 
         this.removeIndexes(ctx, collection, true);
 
         ctx.lua(`
-            redis.call('ZREM', '${this.keyPrefix}:${collection}:ids', id)
-            redis.call('DEL', key)
+            w_zrem('${this.keyPrefix}:${collection}:ids', id)
+            w_del_hash(key)
             ret = { 'delete', 'noError' }
         `);
     }
 
-    private getOp(ctx: Context, collection: string, id: RecordId): void {
+    private getOp(ctx: Context, collection: string, id: RecordId | RecordRef): void {
         ctx.lua(`
-            local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
-            if redis.call("EXISTS", key) == 0 then return { 'get', 'notFound' } end
+            local key = '${this.keyPrefix}:${collection}:' .. ${ctx.id(id)}
+            if redis.call("EXISTS", key) == 0 then return abort({ 'get', 'notFound' }) end
             ret = { 'get', 'noError', redis.call('HGETALL', key), '${collection}' }
         `);
     }
 
-    private existsOp(ctx: Context, collection: string, id: RecordId): void {
+    private existsOp(ctx: Context, collection: string, id: RecordId | RecordRef): void {
         // In a transaction, a missing record aborts the transaction
-        const missing = ctx.inTransaction ? `{ 'exists', 'notFound' }` : `{ 'exists', 'noError', 0 }`;
+        const missing = ctx.inTransaction ? `abort({ 'exists', 'notFound' })` : `{ 'exists', 'noError', 0 }`;
 
         ctx.lua(`
-            local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
+            local key = '${this.keyPrefix}:${collection}:' .. ${ctx.id(id)}
             if redis.call("EXISTS", key) == 0 then return ${missing} end
             ret = { 'exists', 'noError', 1 }
         `);
@@ -889,7 +946,7 @@ export class RigidDB<S extends Schema = Schema> {
             `);
         }
 
-        ctx.lua(`if uniqueError then return { '${method}', 'notUnique', nonUniqueIndexes } end`);
+        ctx.lua(`if uniqueError then return abort({ '${method}', 'notUnique', nonUniqueIndexes }) end`);
     }
 
     private addIndexes(
@@ -910,9 +967,9 @@ export class RigidDB<S extends Schema = Schema> {
                 const score = scores.get((fields[0] as NormalizedIndexField).name);
 
                 if (score === null) {
-                    ctx.lua(`redis.call('ZREM', '${redisKey}', id)`);
+                    ctx.lua(`w_zrem('${redisKey}', id)`);
                 } else if (score !== undefined) {
-                    ctx.lua(`redis.call('ZADD', '${redisKey}', ${ctx.arg(score)}, id)`);
+                    ctx.lua(`w_zadd('${redisKey}', ${ctx.arg(score)}, id)`);
                 }
 
                 continue;
@@ -923,12 +980,13 @@ export class RigidDB<S extends Schema = Schema> {
                     local hashId = redis.call('HGET', '${redisKey}', ${redisValue})
                     local isSet = redis.call('EXISTS', '${redisKey}:' .. ${redisValue})
                     if not hashId and isSet == 0 then
-                        redis.call('HSET', '${redisKey}', ${redisValue}, id)
+                        w_hset_field('${redisKey}', ${redisValue}, id)
                     elseif isSet == 0 then
-                        redis.call('HDEL', '${redisKey}', ${redisValue})
-                        redis.call('SADD', '${redisKey}:' .. ${redisValue}, id, hashId)
+                        w_hdel('${redisKey}', ${redisValue})
+                        w_sadd('${redisKey}:' .. ${redisValue}, id)
+                        w_sadd('${redisKey}:' .. ${redisValue}, hashId)
                     else
-                        redis.call('SADD', '${redisKey}:' .. ${redisValue}, id)
+                        w_sadd('${redisKey}:' .. ${redisValue}, id)
                     end
                 end
             `);
@@ -939,7 +997,7 @@ export class RigidDB<S extends Schema = Schema> {
         for (const { redisKey, redisValue, range } of this.genAllIndexes(collection)) {
             if (range) {
                 if (withRange) {
-                    ctx.lua(`redis.call('ZREM', '${redisKey}', id)`);
+                    ctx.lua(`w_zrem('${redisKey}', id)`);
                 }
 
                 continue;
@@ -947,14 +1005,14 @@ export class RigidDB<S extends Schema = Schema> {
 
             ctx.lua(`
                 do
-                    local removed = redis.call('HDEL', '${redisKey}', ${redisValue})
+                    local removed = w_hdel('${redisKey}', ${redisValue})
                     if removed == 0 then
-                        redis.call('SREM', '${redisKey}:' .. ${redisValue}, id)
+                        w_srem('${redisKey}:' .. ${redisValue}, id)
                         local remaining = redis.call('SCARD', '${redisKey}:' .. ${redisValue})
                         if remaining == 1 then
                             local last = redis.call('SMEMBERS', '${redisKey}:' .. ${redisValue})
-                            redis.call('DEL', '${redisKey}:' .. ${redisValue})
-                            redis.call('HSET', '${redisKey}', ${redisValue}, last[1])
+                            w_del_set('${redisKey}:' .. ${redisValue})
+                            w_hset_field('${redisKey}', ${redisValue}, last[1])
                         end
                     end
                 end
@@ -1339,14 +1397,88 @@ function utilityFuncs(): string {
             return result
         end
 
-        local hset = function (key, dict)
-            if next(dict) == nil then return nil end
-            local bulk = {}
-            for k, v in pairs(dict) do
-                table.insert(bulk, k)
-                table.insert(bulk, v)
+        -- Every write goes through these functions. Each records how to undo it, so that a failed
+        -- operation or transaction can be rolled back.
+        local undo = {}
+
+        local rollback = function ()
+            for i = #undo, 1, -1 do
+                undo[i]()
             end
-            return redis.call('HSET', key, unpack(bulk))
+            undo = {}
+        end
+
+        local abort = function (reply)
+            rollback()
+            return reply
+        end
+
+        local w_hset_field = function (key, field, value)
+            local old = redis.call('HGET', key, field)
+            table.insert(undo, function ()
+                if old then redis.call('HSET', key, field, old) else redis.call('HDEL', key, field) end
+            end)
+            redis.call('HSET', key, field, value)
+        end
+
+        local w_hset = function (key, dict)
+            for field, value in pairs(dict) do
+                w_hset_field(key, field, value)
+            end
+        end
+
+        local w_hdel = function (key, field)
+            local old = redis.call('HGET', key, field)
+            if not old then return 0 end
+            table.insert(undo, function () redis.call('HSET', key, field, old) end)
+            return redis.call('HDEL', key, field)
+        end
+
+        local w_sadd = function (key, member)
+            if redis.call('SADD', key, member) == 1 then
+                table.insert(undo, function () redis.call('SREM', key, member) end)
+            end
+        end
+
+        local w_srem = function (key, member)
+            if redis.call('SREM', key, member) == 1 then
+                table.insert(undo, function () redis.call('SADD', key, member) end)
+            end
+        end
+
+        local w_zadd = function (key, score, member)
+            local old = redis.call('ZSCORE', key, member)
+            table.insert(undo, function ()
+                if old then redis.call('ZADD', key, old, member) else redis.call('ZREM', key, member) end
+            end)
+            redis.call('ZADD', key, score, member)
+        end
+
+        local w_zrem = function (key, member)
+            local old = redis.call('ZSCORE', key, member)
+            if not old then return end
+            table.insert(undo, function () redis.call('ZADD', key, old, member) end)
+            redis.call('ZREM', key, member)
+        end
+
+        local w_incr = function (key)
+            local old = redis.call('GET', key)
+            table.insert(undo, function ()
+                if old then redis.call('SET', key, old) else redis.call('DEL', key) end
+            end)
+            return redis.call('INCR', key)
+        end
+
+        local w_del_hash = function (key)
+            local old = redis.call('HGETALL', key)
+            table.insert(undo, function () redis.call('HSET', key, unpack(old)) end)
+            redis.call('DEL', key)
+        end
+
+        local w_del_set = function (key)
+            local old = redis.call('SMEMBERS', key)
+            table.insert(undo, function () redis.call('SADD', key, unpack(old)) end)
+            redis.call('DEL', key)
         end
     `).join('\n');
 }
