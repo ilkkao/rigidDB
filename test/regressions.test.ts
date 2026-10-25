@@ -67,7 +67,8 @@ describe('Regressions', function() {
             }
         });
 
-        expect(result).to.equal(100);
+        expect(result).to.have.length(100);
+        expect(result.at(-1)).to.equal(100);
         expect(await store.count('car')).to.deep.equal(100);
     });
 

@@ -34,7 +34,7 @@ describe('Transaction', function() {
 
     it('empty transaction', function() {
         return store.transaction(function() {}).then(function(result) {
-            expect(result).to.equal(undefined);
+            expect(result).to.deep.equal([]);
         });
     });
 
@@ -60,12 +60,12 @@ describe('Transaction', function() {
             tr.update('car', 1, { color: 'white' });
             tr.get('car', 1);
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                    color: 'white',
-                    mileage: 42,
-                    convertible: true,
-                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-                });
+            expect(result).to.deep.equal([ 1, 1, {
+                color: 'white',
+                mileage: 42,
+                convertible: true,
+                purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
+            } ]);
 
             return redisClient.hgetall('foo-42:car:1');
         }).then(function(result) {
@@ -110,7 +110,7 @@ describe('Transaction', function() {
             });
             tr.delete('car', 1);
         }).then(function(result) {
-            expect(result).to.equal(undefined);
+            expect(result).to.deep.equal([ 1, undefined ]);
 
             return redisClient.keys('*');
         }).then(function(result) {
