@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 describe('Constructor', function() {
     it('Missing prefix parameter throws', function() {
@@ -29,11 +29,10 @@ describe('Constructor', function() {
             let store = new RigidDB('foo', 42, redisOpts);
 
             return store.create('cars', {});
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'invalidStoredSchema',
-                method: 'create',
-                val: false
+                method: 'create'
             });
         });
     });
@@ -45,11 +44,10 @@ describe('Constructor', function() {
             let store = new RigidDB('foo', 42, redisOpts);
 
             return store.create('cars', {});
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'invalidStoredSchema',
-                method: 'create',
-                val: false
+                method: 'create'
             });
         });
     });
@@ -63,11 +61,10 @@ describe('Constructor', function() {
             return store.transaction(function(tr) {
                 tr.create('cars', { color: 'black' });
             });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'invalidStoredSchema',
-                method: 'transaction',
-                val: false
+                method: 'transaction'
             });
         });
     });

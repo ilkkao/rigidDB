@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts, unwrap } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 let id: number;
@@ -38,19 +38,17 @@ describe('Update', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
-            id = unwrap(result);
+            id = result;
         });
     });
 
     it('Fails if id doesn\'t exists', function() {
         return store.update('car', 42, {
             color: 'red'
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'update',
-                err: 'notFound',
-                val: false,
-                indexes: []
+                err: 'notFound'
             });
         });
     });
@@ -62,9 +60,7 @@ describe('Update', function() {
             convertible: false,
             purchaseDate: new Date('Wed Nov 11 2015 18:29:45 GMT+0100 (CET)')
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: 2
-            });
+            expect(result).to.deep.equal(2);
 
             return store.update('car', id, {
                 color: 'blue',
@@ -72,11 +68,10 @@ describe('Update', function() {
                 convertible: true,
                 purchaseDate: new Date('Wed Nov 11 2015 18:29:45 GMT+0100 (CET)')
             });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'update',
                 err: 'notUnique',
-                val: false,
                 indexes: [ 'first' ]
             });
         });
@@ -89,9 +84,7 @@ describe('Update', function() {
             convertible: true,
             purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: 0
-            });
+            expect(result).to.deep.equal(0);
         });
     });
 
@@ -103,9 +96,7 @@ describe('Update', function() {
             purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)'),
             foobar: new Date(NaN) // Properties not in schema are ignored
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: 3
-            });
+            expect(result).to.deep.equal(3);
 
             return redisClient.hgetall('foo-42:car:1');
         }).then(function(result) {
@@ -146,11 +137,10 @@ describe('Update', function() {
             mileage: null,
             convertible: false,
             purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)')
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'update',
-                err: 'nullNotAllowed',
-                val: false
+                err: 'nullNotAllowed'
             });
         });
     });
@@ -162,9 +152,7 @@ describe('Update', function() {
             convertible: false,
             purchaseDate: null
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: 4
-            });
+            expect(result).to.deep.equal(4);
         });
     });
 

@@ -15,7 +15,7 @@ Requires Node.js 22 or later. The package is an ES module and includes TypeScrip
 ## Example
 
 ```javascript
-import RigidDB from 'rigiddb';
+import RigidDB, { RigidDBError } from 'rigiddb';
 
 const store = new RigidDB('mydb', 42);
 
@@ -44,7 +44,7 @@ await store.setSchema({
     }
 });
 
-const { val: id } = await store.create('cars', {
+const id = await store.create('cars', {
     color: 'blue',
     model: 'sedan',
     mileage: 12345,
@@ -53,8 +53,24 @@ const { val: id } = await store.create('cars', {
 });
 // id = 1
 
-const { val: results } = await store.find('cars', { color: 'blue' });
+const results = await store.find('cars', { color: 'blue' });
 // results = [ 1 ]
+
+try {
+    await store.create('cars', {
+        color: 'blue',
+        model: 'SEDAN',
+        mileage: 1,
+        convertible: false,
+        purchaseDate: null
+    });
+} catch (err) {
+    if (err instanceof RigidDBError && err.code === 'notUnique') {
+        // err.indexes = [ 'first' ], the model and color are already taken
+    } else {
+        throw err;
+    }
+}
 ```
 
 CommonJS code can load the module with `require('rigiddb').default`.
@@ -76,28 +92,23 @@ Throws an `Error` if `databaseName` or `revision` is invalid.
 
 ## Database API
 
-#### Return values
+#### Errors
 
-Every method returns a promise that resolves to a result object.
+Every method returns a promise. When an operation fails, the promise is rejected with a `RigidDBError` that has these properties:
 
-On success, the result object has a `val` property that holds the return value.
+| Property  | Description                                                   |
+|-----------|---------------------------------------------------------------|
+| `code`    | Error code, see the table below. |
+| `method`  | Name of the method that failed. In a transaction, the operation that failed. |
+| `indexes` | Names of the violated unique indexes. Set for `notUnique`. |
+| `reason`  | Why the schema is invalid. Set for `invalidSchema`. |
 
-On failure, the result object has `val: false`, `method` (the method name), and `err` (an error code string).
-
-For example, `delete` can resolve to:
-
-```
-{
-    method: 'delete',
-    err: 'notFound',
-    val: false
-}
-```
-
-When `create` or `update` fails in Redis, the result object also has an `indexes` property with the names of the violated unique indexes.
+Errors from Redis itself, such as a lost connection, are passed through as they are.
 
 | Error code          | Description                                                   |
 |---------------------|---------------------------------------------------------------|
+| `invalidSchema`     | The schema given to `setSchema()` is invalid. |
+| `schemaExists`      | `setSchema()` was called for a database that already has a schema. |
 | `schemaMissing`     | No schema has been set for the database with `setSchema()`. |
 | `invalidStoredSchema` | The schema stored in Redis is invalid. |
 | `unknownCollection` | The collection isn't defined in the schema. |
@@ -113,8 +124,6 @@ When `create` or `update` fails in Redis, the result object also has an `indexes
 Defines the schema of the database. The schema can be set only once; future versions of this library will support schema changes and data migrations. The schema is validated before it's activated and persisted. All other methods require a schema.
 
 Collection, field, and index names can contain letters, numbers, dashes, and underscores.
-
-Unlike other methods, `setSchema()` reports an invalid schema with a `reason` property (a human-readable message) instead of `err`.
 
 | Argument         | Description                                                   |
 |------------------|---------------------------------------------------------------|
@@ -206,7 +215,7 @@ Returns the id of the most recently created record in a collection, or 0 if no r
 
 Runs several operations as one transaction. The callback queues the operations, and they run together in a single Lua script, so the return value of one operation can't be used as an argument of the next.
 
-The transaction is aborted at the first operation that fails, or at an `exists()` call that returns false. A typical transaction starts with `exists()` calls that check that the records a new record refers to still exist.
+The transaction is aborted at the first operation that fails. In a transaction, an `exists()` that finds no record fails with `notFound`. A typical transaction starts with `exists()` calls that check that the records a new record refers to still exist.
 
 Aborting doesn't roll back. Redis doesn't undo the writes of a Lua script, so when an operation fails in Redis (for example with `notFound` or `notUnique`), the changes made by the operations before it are kept. Put the checks first.
 

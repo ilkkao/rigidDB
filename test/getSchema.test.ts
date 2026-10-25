@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store = new RigidDB('foo', 42, redisOpts);
 
@@ -12,11 +12,10 @@ describe('GetSchema', function() {
     });
 
     it('Fails when schema is not set', function() {
-        return store.getSchema().then(function(result) {
-            expect(result).to.deep.equal({
+        return store.getSchema().then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'getSchema',
-                err: 'schemaMissing',
-                val: false
+                err: 'schemaMissing'
             });
         });
     });
@@ -46,7 +45,6 @@ describe('GetSchema', function() {
             return store.getSchema();
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: {
                     revision: 42, schema: {
                         cars: {
                             fields: {
@@ -68,8 +66,7 @@ describe('GetSchema', function() {
                             }
                         }
                     }
-                }
-            });
+                });
         });
     });
 });

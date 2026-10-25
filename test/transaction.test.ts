@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -34,19 +34,16 @@ describe('Transaction', function() {
 
     it('empty transaction', function() {
         return store.transaction(function() {}).then(function(result) {
-            expect(result).to.deep.equal({
-                val: true
-            });
+            expect(result).to.equal(undefined);
         });
     });
 
     it('transaction containing invalid create', function() {
         return store.transaction(function(tr) {
             tr.create('car', { color: 'black' });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'missingFields',
-                val: false,
                 method: 'create'
             });
         });
@@ -64,13 +61,11 @@ describe('Transaction', function() {
             tr.get('car', 1);
         }).then(function(result) {
             expect(result).to.deep.equal({
-                val: {
                     color: 'white',
                     mileage: 42,
                     convertible: true,
                     purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
-                }
-            });
+                });
 
             return redisClient.hgetall('foo-42:car:1');
         }).then(function(result) {
@@ -115,9 +110,7 @@ describe('Transaction', function() {
             });
             tr.delete('car', 1);
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: true
-            });
+            expect(result).to.equal(undefined);
 
             return redisClient.keys('*');
         }).then(function(result) {
@@ -134,9 +127,10 @@ describe('Transaction', function() {
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: false
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
+                method: 'exists',
+                err: 'notFound'
             });
 
             return redisClient.keys('*');
@@ -159,11 +153,10 @@ describe('Transaction', function() {
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
-        }).then(function(result) {
-            expect(result).to.deep.equal({
+        }).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'create',
-                err: 'unknownCollection',
-                val: false
+                err: 'unknownCollection'
             });
 
             return redisClient.keys('*');
@@ -175,11 +168,10 @@ describe('Transaction', function() {
     it('transaction before setSchema fails', function() {
         store = new RigidDB('bar', 42, redisOpts);
 
-        return store.transaction(function() {}).then(function(result) {
-            expect(result).to.deep.equal({
+        return store.transaction(function() {}).then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 method: 'transaction',
-                err: 'schemaMissing',
-                val: false
+                err: 'schemaMissing'
             });
         });
     });

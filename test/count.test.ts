@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB } from '../src/index.ts';
-import { redisClient, redisOpts } from './helpers.ts';
+import { redisClient, redisOpts, errorDetails, shouldNotResolve } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -48,26 +48,21 @@ describe('Count', function() {
         }).then(function() {
             return store.count('car');
         }).then(function(result) {
-            expect(result).to.deep.equal({
-                val: 2
-            });
+            expect(result).to.deep.equal(2);
         });
     });
 
     it('Get count for empty collection', function() {
         return store.count('car').then(function(result) {
-            expect(result).to.deep.equal({
-                val: 0
-            });
+            expect(result).to.deep.equal(0);
         });
     });
 
     it('Get count for invalid type', function() {
-        return store.count('bikes').then(function(result) {
-            expect(result).to.deep.equal({
+        return store.count('bikes').then(shouldNotResolve, function(result) {
+            expect(errorDetails(result)).to.deep.equal({
                 err: 'unknownCollection',
-                method: 'count',
-                val: false
+                method: 'count'
             });
         });
     });

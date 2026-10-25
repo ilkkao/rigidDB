@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { RigidDB, type CollectionDefinition } from '../src/index.ts';
-import { redisClient, redisOpts, unwrap } from './helpers.ts';
+import { redisClient, redisOpts, expectError } from './helpers.ts';
 
 let store: RigidDB;
 
@@ -30,42 +30,33 @@ describe('Regressions', function() {
     });
 
     it('Float values survive a round trip', async function() {
-        const id = unwrap(await store.create('car', { model: 'a', mileage: 1.5, purchaseDate: null }));
+        const id = await store.create('car', { model: 'a', mileage: 1.5, purchaseDate: null });
 
-        expect(await store.get('car', id)).to.deep.equal({
-            val: { model: 'a', mileage: 1.5, purchaseDate: null }
-        });
+        expect(await store.get('car', id)).to.deep.equal({ model: 'a', mileage: 1.5, purchaseDate: null });
     });
 
     it('Dates keep their milliseconds and can be found regardless of the time zone', async function() {
         const purchaseDate = new Date('2015-11-01T16:41:24.123Z');
-        const id = unwrap(await store.create('car', { model: 'a', mileage: 1, purchaseDate }));
+        const id = await store.create('car', { model: 'a', mileage: 1, purchaseDate });
 
-        expect(await store.get('car', id)).to.deep.equal({
-            val: { model: 'a', mileage: 1, purchaseDate }
-        });
+        expect(await store.get('car', id)).to.deep.equal({ model: 'a', mileage: 1, purchaseDate });
         expect(await redisClient.hget(`foo-42:car:${id}`, 'purchaseDate')).to.equal('2015-11-01T16:41:24.123Z');
-        expect(await store.find('car', { purchaseDate: new Date(purchaseDate.getTime()) })).to.deep.equal({
-            val: [ id ]
-        });
+        expect(await store.find('car', { purchaseDate: new Date(purchaseDate.getTime()) })).to.deep.equal([ id ]);
     });
 
     it('Dates stored by older versions can be read', async function() {
         const purchaseDate = new Date('2015-11-01T16:41:24.000Z');
-        const id = unwrap(await store.create('car', { model: 'a', mileage: 1, purchaseDate }));
+        const id = await store.create('car', { model: 'a', mileage: 1, purchaseDate });
 
         await redisClient.hset(`foo-42:car:${id}`, 'purchaseDate', purchaseDate.toString());
 
-        expect(await store.get('car', id)).to.deep.equal({
-            val: { model: 'a', mileage: 1, purchaseDate }
-        });
+        expect(await store.get('car', id)).to.deep.equal({ model: 'a', mileage: 1, purchaseDate });
     });
 
     it('Invalid Date is rejected', async function() {
-        expect(await store.create('car', { model: 'a', mileage: 1, purchaseDate: new Date('not a date') })).to.deep.equal({
+        await expectError(store.create('car', { model: 'a', mileage: 1, purchaseDate: new Date('not a date') }), {
             method: 'create',
-            err: 'wrongType',
-            val: false
+            err: 'wrongType'
         });
     });
 
@@ -76,15 +67,14 @@ describe('Regressions', function() {
             }
         });
 
-        expect(result).to.deep.equal({ val: 100 });
-        expect(await store.count('car')).to.deep.equal({ val: 100 });
+        expect(result).to.equal(100);
+        expect(await store.count('car')).to.deep.equal(100);
     });
 
     it('Object.prototype properties are not collections', async function() {
-        expect(await store.get('constructor', 1)).to.deep.equal({
+        await expectError(store.get('constructor', 1), {
             method: 'get',
-            err: 'unknownCollection',
-            val: false
+            err: 'unknownCollection'
         });
     });
 
@@ -95,30 +85,30 @@ describe('Regressions', function() {
         await store.setSchema(srcSchema);
         srcSchema.car.fields['model'] = 'int';
 
-        const result = unwrap(await store.getSchema());
+        const result = await store.getSchema();
         expect(result.schema['car']?.fields['model']).to.equal('string');
     });
 
     it('Invalid collection and index names are rejected', async function() {
-        expect(await fresh().setSchema({ "car'": { fields: { model: 'string' } } })).to.deep.equal({
+        await expectError(fresh().setSchema({ "car'": { fields: { model: 'string' } } }), {
             method: 'setSchema',
-            reason: 'Invalid collection name (letters, numbers, and dashes allowed): \'car\'\'',
-            val: false
+            err: 'invalidSchema',
+            reason: 'Invalid collection name (letters, numbers, and dashes allowed): \'car\'\''
         });
 
-        expect(await fresh().setSchema({
+        await expectError(fresh().setSchema({
             car: { fields: { model: 'string' }, indexes: { 'a:b': { unique: true, fields: [ 'model' ] } } }
-        })).to.deep.equal({
+        }), {
             method: 'setSchema',
-            reason: 'Invalid index name (letters, numbers, and dashes allowed): \'a:b\'',
-            val: false
+            err: 'invalidSchema',
+            reason: 'Invalid index name (letters, numbers, and dashes allowed): \'a:b\''
         });
 
         // @ts-expect-error: invalid input on purpose
-        expect(await fresh().setSchema({ car: null })).to.deep.equal({
+        await expectError(fresh().setSchema({ car: null }), {
             method: 'setSchema',
-            reason: 'Fields missing.',
-            val: false
+            err: 'invalidSchema',
+            reason: 'Fields missing.'
         });
     });
 
