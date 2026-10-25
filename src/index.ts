@@ -17,19 +17,19 @@ export interface IndexField {
 }
 
 export interface IndexDefinition {
-    uniq: boolean;
+    unique: boolean;
     fields: (string | IndexField)[];
 }
 
 export interface CollectionDefinition {
-    definition: Record<string, FieldType | FieldDefinition>;
-    indices?: Record<string, IndexDefinition>;
+    fields: Record<string, FieldType | FieldDefinition>;
+    indexes?: Record<string, IndexDefinition>;
 }
 
 export type Schema = Record<string, CollectionDefinition>;
 
-export type Value = string | number | boolean | Date | null;
-export type Attributes = Record<string, Value>;
+export type FieldValue = string | number | boolean | Date | null;
+export type FieldValues = Record<string, FieldValue>;
 
 export type Method =
     | 'setSchema'
@@ -40,17 +40,17 @@ export type Method =
     | 'get'
     | 'exists'
     | 'list'
-    | 'size'
+    | 'count'
     | 'currentId'
     | 'find'
-    | 'multi';
+    | 'transaction';
 
 export type ErrorCode =
-    | 'badSavedSchema'
+    | 'invalidStoredSchema'
     | 'schemaMissing'
     | 'unknownCollection'
     | 'unknownIndex'
-    | 'badParameter'
+    | 'missingFields'
     | 'nullNotAllowed'
     | 'wrongType'
     | 'notFound'
@@ -64,8 +64,8 @@ export interface Failure {
     val: false;
     err: ErrorCode;
     method: Method;
-    // Names of the conflicting unique indices. Set when a create or update fails in Redis.
-    indices?: string[];
+    // Names of the conflicting unique indexes. Set when a create or update fails in Redis.
+    indexes?: string[];
 }
 
 export type Result<T> = Success<T> | Failure;
@@ -75,14 +75,14 @@ export type SetSchemaResult = Success<true> | { val: false; reason: string; meth
 export type RedisConnectionOptions = Pick<RedisOptions, 'host' | 'port' | 'password' | 'db' | 'retryStrategy'>;
 
 export interface Transaction {
-    create(collection: string, attrs: Attributes): void;
-    update(collection: string, id: Id, attrs: Attributes): void;
-    delete(collection: string, id: Id): void;
-    get(collection: string, id: Id): void;
-    exists(collection: string, id: Id): void;
+    create(collection: string, values: FieldValues): void;
+    update(collection: string, id: RecordId, values: FieldValues): void;
+    delete(collection: string, id: RecordId): void;
+    get(collection: string, id: RecordId): void;
+    exists(collection: string, id: RecordId): void;
 }
 
-export type Id = number | string;
+export type RecordId = number | string;
 
 interface NormalizedField {
     type: FieldType;
@@ -95,13 +95,13 @@ interface NormalizedIndexField {
 }
 
 interface NormalizedIndex {
-    uniq: boolean;
+    unique: boolean;
     fields: NormalizedIndexField[];
 }
 
 interface NormalizedCollection {
-    definition: Record<string, NormalizedField>;
-    indices: Record<string, NormalizedIndex>;
+    fields: Record<string, NormalizedField>;
+    indexes: Record<string, NormalizedIndex>;
 }
 
 type NormalizedSchema = Record<string, NormalizedCollection>;
@@ -111,7 +111,7 @@ interface RedisIndex {
     redisKey: string;
     redisValue: string;
     fields: NormalizedIndexField[];
-    uniq: boolean;
+    unique: boolean;
 }
 
 // Collects the Lua code and the parameters of a script
@@ -139,7 +139,7 @@ class Context {
     }
 
     // Passes the value to the script as a parameter and returns the Lua expression referring to it
-    arg(value: Id): string {
+    arg(value: RecordId): string {
         this.params.push(String(value));
 
         return `ARGV[${this.params.length}]`;
@@ -158,7 +158,7 @@ export class RigidDB {
     readonly revision: number;
     readonly client: Redis;
 
-    private invalidSavedSchema = false;
+    private invalidStoredSchema = false;
     private schema: NormalizedSchema | null = null;
     private srcSchema: Schema | null = null;
     private schemaPromise: Promise<void> | null = null;
@@ -216,24 +216,24 @@ export class RigidDB {
             { val: false, err: 'schemaMissing', method: 'getSchema' };
     }
 
-    create(collection: string, attrs: Attributes): Promise<Result<number>> {
-        return this.execSingle(this.createOp, 'create', collection, attrs);
+    create(collection: string, values: FieldValues): Promise<Result<number>> {
+        return this.execSingle(this.createOp, 'create', collection, values);
     }
 
-    // Resolves to the number of attributes that changed.
-    update(collection: string, id: Id, attrs: Attributes): Promise<Result<number>> {
-        return this.execSingle(this.updateOp, 'update', collection, id, attrs);
+    // Resolves to the number of fields that changed.
+    update(collection: string, id: RecordId, values: FieldValues): Promise<Result<number>> {
+        return this.execSingle(this.updateOp, 'update', collection, id, values);
     }
 
-    delete(collection: string, id: Id): Promise<Result<true>> {
+    delete(collection: string, id: RecordId): Promise<Result<true>> {
         return this.execSingle(this.deleteOp, 'delete', collection, id);
     }
 
-    get(collection: string, id: Id): Promise<Result<Attributes>> {
+    get(collection: string, id: RecordId): Promise<Result<FieldValues>> {
         return this.execSingle(this.getOp, 'get', collection, id);
     }
 
-    exists(collection: string, id: Id): Promise<Result<boolean>> {
+    exists(collection: string, id: RecordId): Promise<Result<boolean>> {
         return this.execSingle(this.existsOp, 'exists', collection, id);
     }
 
@@ -241,28 +241,28 @@ export class RigidDB {
         return this.execSingle(this.listOp, 'list', collection);
     }
 
-    size(collection: string): Promise<Result<number>> {
-        return this.execSingle(this.sizeOp, 'size', collection);
+    count(collection: string): Promise<Result<number>> {
+        return this.execSingle(this.countOp, 'count', collection);
     }
 
     currentId(collection: string): Promise<Result<number>> {
         return this.execSingle(this.currentIdOp, 'currentId', collection);
     }
 
-    find(collection: string, searchAttrs: Attributes): Promise<Result<number[]>> {
-        return this.execSingle(this.findOp, 'find', collection, searchAttrs);
+    find(collection: string, query: FieldValues): Promise<Result<number[]>> {
+        return this.execSingle(this.findOp, 'find', collection, query);
     }
 
     // Resolves to the return value of the last method in the transaction.
-    async multi(cb: (tr: Transaction) => void): Promise<Result<unknown>> {
+    async transaction(cb: (tr: Transaction) => void): Promise<Result<unknown>> {
         await this.ensureSchema();
 
         const ctx = new Context();
 
-        if (this.invalidSavedSchema) {
-            ctx.error = { method: 'multi', err: 'badSavedSchema' };
+        if (this.invalidStoredSchema) {
+            ctx.error = { method: 'transaction', err: 'invalidStoredSchema' };
         } else if (!this.schema) {
-            ctx.error = { method: 'multi', err: 'schemaMissing' };
+            ctx.error = { method: 'transaction', err: 'schemaMissing' };
         } else {
             const execute = <A extends unknown[]>(op: Op<A>, method: Method, collection: string, ...args: A) => {
                 if (!ctx.error) {
@@ -271,8 +271,8 @@ export class RigidDB {
             };
 
             cb({
-                create: (collection, attrs) => execute(this.createOp, 'create', collection, attrs),
-                update: (collection, id, attrs) => execute(this.updateOp, 'update', collection, id, attrs),
+                create: (collection, values) => execute(this.createOp, 'create', collection, values),
+                update: (collection, id, values) => execute(this.updateOp, 'update', collection, id, values),
                 delete: (collection, id) => execute(this.deleteOp, 'delete', collection, id),
                 get: (collection, id) => execute(this.getOp, 'get', collection, id),
                 exists: (collection, id) => execute(this.existsOp, 'exists', collection, id)
@@ -293,7 +293,7 @@ export class RigidDB {
 
             for (const id of ids) {
                 const result = await this.client.hgetall(`${this.keyPrefix}:${collection}:${id}`);
-                data.push({ ...this.processRedisAttrsForPrinting(collection, result), id });
+                data.push({ ...this.printableValues(collection, result), id });
             }
         }
 
@@ -323,16 +323,16 @@ export class RigidDB {
         let srcSchema: unknown;
 
         try {
-            srcSchema = JSON.parse(result);
+            srcSchema = upgradeLegacySchema(JSON.parse(result));
         } catch {
-            this.invalidSavedSchema = true;
+            this.invalidStoredSchema = true;
             return;
         }
 
         const ret = normalizeAndVerifySchema(srcSchema);
 
         if ('err' in ret) {
-            this.invalidSavedSchema = true;
+            this.invalidStoredSchema = true;
         } else {
             this.srcSchema = srcSchema as Schema;
             this.schema = ret.schema;
@@ -382,8 +382,8 @@ export class RigidDB {
 
         const ctx = new Context();
 
-        if (this.invalidSavedSchema) {
-            ctx.error = { method, err: 'badSavedSchema' };
+        if (this.invalidStoredSchema) {
+            ctx.error = { method, err: 'invalidStoredSchema' };
         } else if (!this.schema) {
             ctx.error = { method, err: 'schemaMissing' };
         } else {
@@ -400,7 +400,7 @@ export class RigidDB {
         }
 
         // Every operation gets its own Lua block. Lua allows max 200 local variables per function,
-        // a long multi() would otherwise run out of them.
+        // a long transaction() would otherwise run out of them.
         ctx.lua('do');
         ctx.indented(() => op.call(this, ctx, collection, ...args));
         ctx.lua('end');
@@ -441,7 +441,7 @@ export class RigidDB {
 
         if (err !== 'noError') {
             if (method === 'create' || method === 'update') {
-                return { val: false, err, method, indices: (val as string[] | undefined) ?? [] };
+                return { val: false, err, method, indexes: (val as string[] | undefined) ?? [] };
             }
 
             return { val: false, err, method };
@@ -473,18 +473,18 @@ export class RigidDB {
         return this.collectionSchema(collection)!;
     }
 
-    private createOp(ctx: Context, collection: string, attrs: Attributes): void {
-        const redisAttrs = this.normalizeRedisAttrs(collection, attrs);
+    private createOp(ctx: Context, collection: string, values: FieldValues): void {
+        const redisValues = this.toRedisValues(collection, values);
 
-        if ('err' in redisAttrs) {
-            ctx.error = { method: 'create', err: redisAttrs.err };
+        if ('err' in redisValues) {
+            ctx.error = { method: 'create', err: redisValues.err };
             return;
         }
 
-        const definition = this.requireCollectionSchema(collection).definition;
+        const fields = this.requireCollectionSchema(collection).fields;
 
-        if (Object.keys(definition).toSorted().join(':') !== Object.keys(redisAttrs.val).toSorted().join(':')) {
-            ctx.error = { method: 'create', err: 'badParameter' };
+        if (Object.keys(fields).toSorted().join(':') !== Object.keys(redisValues.val).toSorted().join(':')) {
+            ctx.error = { method: 'create', err: 'missingFields' };
             return;
         }
 
@@ -492,9 +492,9 @@ export class RigidDB {
             local id = redis.call('INCR', '${this.keyPrefix}:${collection}:nextid')
             local key = '${this.keyPrefix}:${collection}:' .. id
         `);
-        this.addValuesVar(ctx, redisAttrs.val);
+        this.addValuesVar(ctx, redisValues.val);
 
-        this.addIndices(ctx, collection, 'create', true);
+        this.addIndexes(ctx, collection, 'create', true);
 
         ctx.lua(`
             hset(key, values)
@@ -503,11 +503,11 @@ export class RigidDB {
         `);
     }
 
-    private updateOp(ctx: Context, collection: string, id: Id, attrs: Attributes): void {
-        const redisAttrs = this.normalizeRedisAttrs(collection, attrs);
+    private updateOp(ctx: Context, collection: string, id: RecordId, values: FieldValues): void {
+        const redisValues = this.toRedisValues(collection, values);
 
-        if ('err' in redisAttrs) {
-            ctx.error = { method: 'update', err: redisAttrs.err };
+        if ('err' in redisValues) {
+            ctx.error = { method: 'update', err: redisValues.err };
             return;
         }
 
@@ -519,7 +519,7 @@ export class RigidDB {
             local chg = 0
         `);
 
-        const argRefs = Object.entries(redisAttrs.val).map(([prop, val]) => [prop, ctx.arg(val)] as const);
+        const argRefs = Object.entries(redisValues.val).map(([prop, val]) => [prop, ctx.arg(val)] as const);
 
         for (const [prop, ref] of argRefs) {
             ctx.lua(`
@@ -528,17 +528,17 @@ export class RigidDB {
             `);
         }
 
-        this.assertUniqIndicesFree(ctx, this.genAllIndices(collection), 'update');
+        this.assertUniqueIndexesFree(ctx, this.genAllIndexes(collection), 'update');
 
         ctx.lua(`values = hgetall(key)`);
-        this.removeIndices(ctx, collection);
+        this.removeIndexes(ctx, collection);
 
         for (const [prop, ref] of argRefs) {
             ctx.lua(`values['${prop}'] = ${ref}`);
         }
 
         // Uniqueness was verified above, before anything was modified
-        this.addIndices(ctx, collection, 'update', false);
+        this.addIndexes(ctx, collection, 'update', false);
 
         ctx.lua(`
             hset(key, values)
@@ -546,7 +546,7 @@ export class RigidDB {
         `);
     }
 
-    private deleteOp(ctx: Context, collection: string, id: Id): void {
+    private deleteOp(ctx: Context, collection: string, id: RecordId): void {
         ctx.lua(`
             local id = ${ctx.arg(id)}
             local key = '${this.keyPrefix}:${collection}:' .. id
@@ -554,7 +554,7 @@ export class RigidDB {
             local values = hgetall(key)
         `);
 
-        this.removeIndices(ctx, collection);
+        this.removeIndexes(ctx, collection);
 
         ctx.lua(`
             redis.call('ZREM', '${this.keyPrefix}:${collection}:ids', id)
@@ -563,7 +563,7 @@ export class RigidDB {
         `);
     }
 
-    private getOp(ctx: Context, collection: string, id: Id): void {
+    private getOp(ctx: Context, collection: string, id: RecordId): void {
         ctx.lua(`
             local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
             if redis.call("EXISTS", key) == 0 then return { 'get', 'notFound' } end
@@ -571,7 +571,7 @@ export class RigidDB {
         `);
     }
 
-    private existsOp(ctx: Context, collection: string, id: Id): void {
+    private existsOp(ctx: Context, collection: string, id: RecordId): void {
         ctx.lua(`
             local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
             if redis.call("EXISTS", key) == 0 then return { 'exists', 'noError', 0 } end
@@ -579,8 +579,8 @@ export class RigidDB {
         `);
     }
 
-    private sizeOp(ctx: Context, collection: string): void {
-        ctx.lua(`ret = { 'size', 'noError', redis.call('ZCARD', '${this.keyPrefix}:${collection}:ids') }`);
+    private countOp(ctx: Context, collection: string): void {
+        ctx.lua(`ret = { 'count', 'noError', redis.call('ZCARD', '${this.keyPrefix}:${collection}:ids') }`);
     }
 
     private currentIdOp(ctx: Context, collection: string): void {
@@ -591,10 +591,10 @@ export class RigidDB {
         ctx.lua(`ret = { 'list', 'noError', redis.call('ZRANGE', '${this.keyPrefix}:${collection}:ids', 0, -1) }`);
     }
 
-    private findOp(ctx: Context, collection: string, attrs: Attributes): void {
-        const indices = this.requireCollectionSchema(collection).indices;
-        const searchFields = Object.keys(attrs).toSorted().join();
-        const index = Object.values(indices).find(candidate =>
+    private findOp(ctx: Context, collection: string, values: FieldValues): void {
+        const indexes = this.requireCollectionSchema(collection).indexes;
+        const searchFields = Object.keys(values).toSorted().join();
+        const index = Object.values(indexes).find(candidate =>
             candidate.fields.map(field => field.name).toSorted().join() === searchFields);
 
         if (!index) {
@@ -602,14 +602,14 @@ export class RigidDB {
             return;
         }
 
-        const redisAttrs = this.normalizeRedisAttrs(collection, attrs);
+        const redisValues = this.toRedisValues(collection, values);
 
-        if ('err' in redisAttrs) {
-            ctx.error = { method: 'find', err: redisAttrs.err };
+        if ('err' in redisValues) {
+            ctx.error = { method: 'find', err: redisValues.err };
             return;
         }
 
-        this.addValuesVar(ctx, redisAttrs.val);
+        this.addValuesVar(ctx, redisValues.val);
 
         const name = this.indexName(collection, index);
         const prop = indexValues(index);
@@ -625,16 +625,16 @@ export class RigidDB {
         `);
     }
 
-    private genAllIndices(collection: string): RedisIndex[] {
-        const indices = this.requireCollectionSchema(collection).indices;
+    private genAllIndexes(collection: string): RedisIndex[] {
+        const indexes = this.requireCollectionSchema(collection).indexes;
 
-        // { name: "color:mileage", value: 'red:423423', uniq: false }
-        return Object.entries(indices).map(([name, index]) => ({
+        // { name: "color:mileage", value: 'red:423423', unique: false }
+        return Object.entries(indexes).map(([name, index]) => ({
             name,
             redisKey: this.indexName(collection, index),
             redisValue: indexValues(index),
             fields: index.fields,
-            uniq: index.uniq
+            unique: index.unique
         }));
     }
 
@@ -644,34 +644,34 @@ export class RigidDB {
         return `${this.keyPrefix}:${collection}:i:${fields}`;
     }
 
-    private assertUniqIndicesFree(ctx: Context, indices: RedisIndex[], method: Method): void {
-        ctx.lua(`local nonUniqIndices, uniqError = {}, false`);
+    private assertUniqueIndexesFree(ctx: Context, indexes: RedisIndex[], method: Method): void {
+        ctx.lua(`local nonUniqueIndexes, uniqueError = {}, false`);
 
-        for (const index of indices.filter(candidate => candidate.uniq)) {
+        for (const index of indexes.filter(candidate => candidate.unique)) {
             const notNullCheck = index.fields.map(field => `values["${field.name}"] ~= '~'`).join(' and ');
 
             ctx.lua(`
                 do
                     local currentIndex = redis.call('HGET', '${index.redisKey}', ${index.redisValue})
                     if currentIndex and currentIndex ~= tostring(id) and ${notNullCheck} then
-                        table.insert(nonUniqIndices, '${index.name}')
-                        uniqError = true
+                        table.insert(nonUniqueIndexes, '${index.name}')
+                        uniqueError = true
                     end
                 end
             `);
         }
 
-        ctx.lua(`if uniqError then return { '${method}', 'notUnique', nonUniqIndices } end`);
+        ctx.lua(`if uniqueError then return { '${method}', 'notUnique', nonUniqueIndexes } end`);
     }
 
-    private addIndices(ctx: Context, collection: string, method: Method, assertUniq: boolean): void {
-        const indices = this.genAllIndices(collection);
+    private addIndexes(ctx: Context, collection: string, method: Method, assertUniq: boolean): void {
+        const indexes = this.genAllIndexes(collection);
 
         if (assertUniq) {
-            this.assertUniqIndicesFree(ctx, indices, method);
+            this.assertUniqueIndexesFree(ctx, indexes, method);
         }
 
-        for (const { redisKey, redisValue } of indices) {
+        for (const { redisKey, redisValue } of indexes) {
             ctx.lua(`
                 do
                     local hashId = redis.call('HGET', '${redisKey}', ${redisValue})
@@ -689,8 +689,8 @@ export class RigidDB {
         }
     }
 
-    private removeIndices(ctx: Context, collection: string): void {
-        for (const { redisKey, redisValue } of this.genAllIndices(collection)) {
+    private removeIndexes(ctx: Context, collection: string): void {
+        for (const { redisKey, redisValue } of this.genAllIndexes(collection)) {
             ctx.lua(`
                 do
                     local removed = redis.call('HDEL', '${redisKey}', ${redisValue})
@@ -708,31 +708,31 @@ export class RigidDB {
         }
     }
 
-    private addValuesVar(ctx: Context, attrs: Record<string, string>): void {
-        const values = Object.entries(attrs).map(([prop, val]) => `['${prop}'] = ${ctx.arg(val)}`);
+    private addValuesVar(ctx: Context, values: Record<string, string>): void {
+        const entries = Object.entries(values).map(([prop, val]) => `['${prop}'] = ${ctx.arg(val)}`);
 
-        ctx.lua(`local values = { ${values.join(', ')} }`);
+        ctx.lua(`local values = { ${entries.join(', ')} }`);
     }
 
-    private processRedisGetReturnValue(collection: string, redisRetVal: string[]): Attributes {
+    private processRedisGetReturnValue(collection: string, redisRetVal: string[]): FieldValues {
         const redisObject: Record<string, string> = {};
 
         for (let i = 0; i + 1 < redisRetVal.length; i += 2) {
             redisObject[redisRetVal[i] as string] = redisRetVal[i + 1] as string;
         }
 
-        return this.deNormalizeRedisAttrs(collection, redisObject);
+        return this.fromRedisValues(collection, redisObject);
     }
 
-    private processRedisAttrsForPrinting(collection: string, redisObject: Record<string, string>): Record<string, string> {
-        const attrs = this.deNormalizeRedisAttrs(collection, redisObject);
-        const definition = this.requireCollectionSchema(collection).definition;
+    private printableValues(collection: string, redisObject: Record<string, string>): Record<string, string> {
+        const values = this.fromRedisValues(collection, redisObject);
+        const fields = this.requireCollectionSchema(collection).fields;
         const printable: Record<string, string> = {};
 
-        for (const [prop, val] of Object.entries(attrs)) {
+        for (const [prop, val] of Object.entries(values)) {
             if (val === null) {
                 printable[prop] = '[NULL]';
-            } else if (definition[prop]?.type === 'string') {
+            } else if (fields[prop]?.type === 'string') {
                 printable[prop] = `"${String(val)}"`;
             } else if (val instanceof Date) {
                 printable[prop] = val.toISOString();
@@ -744,55 +744,55 @@ export class RigidDB {
         return printable;
     }
 
-    private normalizeRedisAttrs(collection: string, attrs: Attributes): { val: Record<string, string> } | { err: ErrorCode } {
-        const redisAttrs: Record<string, string> = {};
-        const definitions = this.requireCollectionSchema(collection).definition;
+    private toRedisValues(collection: string, values: FieldValues): { val: Record<string, string> } | { err: ErrorCode } {
+        const redisValues: Record<string, string> = {};
+        const fields = this.requireCollectionSchema(collection).fields;
 
-        for (const [prop, propVal] of Object.entries(attrs)) {
-            const definition = Object.hasOwn(definitions, prop) ? definitions[prop] : undefined;
+        for (const [prop, propVal] of Object.entries(values)) {
+            const field = Object.hasOwn(fields, prop) ? fields[prop] : undefined;
 
-            if (!definition) {
+            if (!field) {
                 continue;
             }
 
             if (propVal === null) {
-                if (!definition.allowNull) {
+                if (!field.allowNull) {
                     return { err: 'nullNotAllowed' };
                 }
 
-                redisAttrs[prop] = '~';
+                redisValues[prop] = '~';
                 continue;
             }
 
-            const redisVal = toRedisValue(definition.type, propVal);
+            const redisVal = toRedisValue(field.type, propVal);
 
             if (redisVal === null) {
                 return { err: 'wrongType' };
             }
 
-            redisAttrs[prop] = redisVal;
+            redisValues[prop] = redisVal;
         }
 
-        return { val: redisAttrs };
+        return { val: redisValues };
     }
 
-    private deNormalizeRedisAttrs(collection: string, redisObject: Record<string, string>): Attributes {
-        const definitions = this.requireCollectionSchema(collection).definition;
-        const attrs: Attributes = {};
+    private fromRedisValues(collection: string, redisObject: Record<string, string>): FieldValues {
+        const fields = this.requireCollectionSchema(collection).fields;
+        const values: FieldValues = {};
 
         for (const [prop, redisVal] of Object.entries(redisObject)) {
-            const type = definitions[prop]?.type;
+            const type = fields[prop]?.type;
 
-            attrs[prop] = redisVal === '~' || !type ? null : fromRedisValue(type, redisVal);
+            values[prop] = redisVal === '~' || !type ? null : fromRedisValue(type, redisVal);
         }
 
-        return attrs;
+        return values;
     }
 }
 
 export default RigidDB;
 
-function toRedisValue(type: FieldType, val: Exclude<Value, null>): string | null {
+function toRedisValue(type: FieldType, val: Exclude<FieldValue, null>): string | null {
     switch (type) {
         case 'boolean':
             return typeof val === 'boolean' ? String(val) : null;
@@ -812,7 +812,7 @@ function toRedisValue(type: FieldType, val: Exclude<Value, null>): string | null
     }
 }
 
-function fromRedisValue(type: FieldType, redisVal: string): Value {
+function fromRedisValue(type: FieldType, redisVal: string): FieldValue {
     switch (type) {
         case 'boolean':
             return redisVal === 'true';
@@ -850,20 +850,20 @@ function normalizeAndVerifySchema(schema: unknown): { schema: NormalizedSchema }
             return { err: `Invalid collection name (letters, numbers, and dashes allowed): '${collectionName}'` };
         }
 
-        const definition = isObject(collection) ? collection['definition'] : undefined;
-        const indices = isObject(collection) ? collection['indices'] ?? {} : {};
+        const fields = isObject(collection) ? collection['fields'] : undefined;
+        const indexes = isObject(collection) ? collection['indexes'] ?? {} : {};
 
-        if (!isObject(definition)) {
-            return { err: 'Definition missing.' };
+        if (!isObject(fields)) {
+            return { err: 'Fields missing.' };
         }
 
-        if (!isObject(indices)) {
-            return { err: 'Invalid indices definition.' };
+        if (!isObject(indexes)) {
+            return { err: 'Invalid indexes definition.' };
         }
 
-        const normalizedDefinition: Record<string, NormalizedField> = {};
+        const normalizedFields: Record<string, NormalizedField> = {};
 
-        for (const [fieldName, fieldDefinition] of Object.entries(definition)) {
+        for (const [fieldName, fieldDefinition] of Object.entries(fields)) {
             if (!onlyLettersNumbersDashes(fieldName)) {
                 return { err: `Invalid field name (letters, numbers, and dashes allowed): '${fieldName}'` };
             }
@@ -880,32 +880,32 @@ function normalizeAndVerifySchema(schema: unknown): { schema: NormalizedSchema }
                 return { err: `Invalid type: '${String(type)}'` };
             }
 
-            normalizedDefinition[fieldName] = {
+            normalizedFields[fieldName] = {
                 type: type as FieldType,
                 allowNull: field['allowNull'] === undefined ? true : !!field['allowNull']
             };
         }
 
-        const normalizedIndices: Record<string, NormalizedIndex> = {};
+        const normalizedIndexes: Record<string, NormalizedIndex> = {};
 
-        for (const [indexName, index] of Object.entries(indices)) {
+        for (const [indexName, index] of Object.entries(indexes)) {
             if (!onlyLettersNumbersDashes(indexName)) {
                 return { err: `Invalid index name (letters, numbers, and dashes allowed): '${indexName}'` };
             }
 
-            if (!isObject(index) || !(index['uniq'] === true || index['uniq'] === false)) {
+            if (!isObject(index) || !(index['unique'] === true || index['unique'] === false)) {
                 return { err: 'Invalid or missing index unique definition' };
             }
 
-            const fields = index['fields'];
+            const indexFields = index['fields'];
 
-            if (!Array.isArray(fields) || fields.length === 0) {
+            if (!Array.isArray(indexFields) || indexFields.length === 0) {
                 return { err: 'Invalid or missing index fields definition' };
             }
 
             const normalizedIndexFields: NormalizedIndexField[] = [];
 
-            for (const indexField of fields as unknown[]) {
+            for (const indexField of indexFields as unknown[]) {
                 const field = typeof indexField === 'string' ? { name: indexField, caseInsensitive: false } : indexField;
 
                 if (!isObject(field)) {
@@ -914,7 +914,7 @@ function normalizeAndVerifySchema(schema: unknown): { schema: NormalizedSchema }
 
                 const name = field['name'];
 
-                if (typeof name !== 'string' || !Object.hasOwn(normalizedDefinition, name)) {
+                if (typeof name !== 'string' || !Object.hasOwn(normalizedFields, name)) {
                     return { err: `Invalid index field name: '${String(name)}'` };
                 }
 
@@ -927,13 +927,29 @@ function normalizeAndVerifySchema(schema: unknown): { schema: NormalizedSchema }
                 normalizedIndexFields.push({ name, caseInsensitive: !!field['caseInsensitive'] });
             }
 
-            normalizedIndices[indexName] = { uniq: index['uniq'], fields: normalizedIndexFields };
+            normalizedIndexes[indexName] = { unique: index['unique'], fields: normalizedIndexFields };
         }
 
-        normalized[collectionName] = { definition: normalizedDefinition, indices: normalizedIndices };
+        normalized[collectionName] = { fields: normalizedFields, indexes: normalizedIndexes };
     }
 
     return { schema: normalized };
+}
+
+type LegacySchema = Record<string, { definition: unknown; indices?: Record<string, { uniq: unknown }> }>;
+
+// Schemas stored by rigiddb 0.x use the keys definition, indices, and uniq
+function upgradeLegacySchema(schema: unknown): unknown {
+    if (!isObject(schema) || !Object.values(schema).every(collection => isObject(collection) && 'definition' in collection)) {
+        return schema;
+    }
+
+    return Object.fromEntries(Object.entries(schema as LegacySchema).map(([name, { definition, indices, ...rest }]) => [name, {
+        ...rest,
+        fields: definition,
+        indexes: Object.fromEntries(Object.entries(indices ?? {}).map(([indexName, { uniq, ...index }]) =>
+            [indexName, { ...index, unique: uniq }]))
+    }]));
 }
 
 function indexValues(index: NormalizedIndex): string {

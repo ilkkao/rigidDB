@@ -1,6 +1,6 @@
 {
   "name": "rigiddb",
-  "version": "0.12.1",
+  "version": "1.0.0",
   "description": "Object store with an index and strict schema",
   "type": "module",
   "exports": {

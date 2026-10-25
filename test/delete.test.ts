@@ -12,19 +12,19 @@ describe('Delete', function() {
         return redisClient.flushdb().then(function() {
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: 'string',
                         mileage: 'int',
                         convertible: 'boolean',
                         purchaseDate: 'date'
                     },
-                    indices: {
+                    indexes: {
                         purchase: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         },
                         details: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }

@@ -12,7 +12,7 @@ describe('Get', function() {
 
             return store.setSchema({
                 car: {
-                    definition: {
+                    fields: {
                         color: { type: 'string', allowNull: true },
                         test: 'string',
                         mileage: 'int',
@@ -20,13 +20,13 @@ describe('Get', function() {
                         purchaseDate: 'date',
                         purchaseTs: 'timestamp'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }

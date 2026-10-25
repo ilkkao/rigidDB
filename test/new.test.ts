@@ -31,7 +31,7 @@ describe('Constructor', function() {
             return store.create('cars', {});
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'badSavedSchema',
+                err: 'invalidStoredSchema',
                 method: 'create',
                 val: false
             });
@@ -47,26 +47,26 @@ describe('Constructor', function() {
             return store.create('cars', {});
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'badSavedSchema',
+                err: 'invalidStoredSchema',
                 method: 'create',
                 val: false
             });
         });
     });
 
-    it('Invalid existing schema causes error for multi', function() {
+    it('Invalid existing schema causes error for transaction', function() {
         return redisClient.flushdb().then(function() {
             return redisClient.set('foo-42:_schema', '{ "cars": {} }');
         }).then(function() {
             let store = new RigidDB('foo', 42, redisOpts);
 
-            return store.multi(function(tr) {
+            return store.transaction(function(tr) {
                 tr.create('cars', { color: 'black' });
             });
         }).then(function(result) {
             expect(result).to.deep.equal({
-                err: 'badSavedSchema',
-                method: 'multi',
+                err: 'invalidStoredSchema',
+                method: 'transaction',
                 val: false
             });
         });

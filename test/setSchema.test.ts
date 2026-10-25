@@ -46,12 +46,12 @@ describe('SetSchema', function() {
         });
     });
 
-    it('Missing collection definition', function() {
+    it('Missing collection fields', function() {
         // @ts-expect-error: invalid input on purpose
         return store.setSchema({ cars: {} }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
-                reason: 'Definition missing.',
+                reason: 'Fields missing.',
                 val: false
             });
         });
@@ -60,7 +60,7 @@ describe('SetSchema', function() {
     it('Invalid collection field name', function() {
         return store.setSchema({
             cars: {
-                definition: {
+                fields: {
                     'co:lor': 'string'
                 }
             }
@@ -76,7 +76,7 @@ describe('SetSchema', function() {
     it('Invalid collection field type', function() {
         return store.setSchema({
             cars: {
-                definition: {
+                fields: {
                     // @ts-expect-error: invalid input on purpose
                     color: 'wrong'
                 }
@@ -93,7 +93,7 @@ describe('SetSchema', function() {
     it('Missing collection field type when object', function() {
         return store.setSchema({
             cars: {
-                definition: {
+                fields: {
                     // @ts-expect-error: invalid input on purpose
                     color: {}
                 }
@@ -110,8 +110,8 @@ describe('SetSchema', function() {
     it('Missing unique property in index definition', function() {
         return store.setSchema({
             cars: {
-                definition: { color: 'string' },
-                indices: {
+                fields: { color: 'string' },
+                indexes: {
                     // @ts-expect-error: invalid input on purpose
                     first: {
                         fields: [ 'color' ]
@@ -130,10 +130,10 @@ describe('SetSchema', function() {
     it('Invalid fields property in index definition', function() {
         return store.setSchema({
             cars: {
-                definition: { color: 'string' },
-                indices: {
+                fields: { color: 'string' },
+                indexes: {
                     first: {
-                        uniq: true,
+                        unique: true,
                         // @ts-expect-error: invalid input on purpose
                         fields: 'color'
                     }
@@ -151,10 +151,10 @@ describe('SetSchema', function() {
     it('Invalid fields property in index definition', function() {
         return store.setSchema({
             cars: {
-                definition: { color: 'string' },
-                indices: {
+                fields: { color: 'string' },
+                indexes: {
                     first: {
-                        uniq: true,
+                        unique: true,
                         fields: []
                     }
                 }
@@ -171,10 +171,10 @@ describe('SetSchema', function() {
     it('Invalid field name in index definition', function() {
         return store.setSchema({
             cars: {
-                definition: { color: 'string' },
-                indices: {
+                fields: { color: 'string' },
+                indexes: {
                     first: {
-                        uniq: true,
+                        unique: true,
                         fields: [ 'color', 'mileage' ]
                     }
                 }
@@ -191,10 +191,10 @@ describe('SetSchema', function() {
     it('Invalid field definition property definition', function() {
         return store.setSchema({
             cars: {
-                definition: { color: 'string' },
-                indices: {
+                fields: { color: 'string' },
+                indexes: {
                     first: {
-                        uniq: true,
+                        unique: true,
                         // @ts-expect-error: invalid input on purpose
                         fields: [ { name: 'color', caseInSensitive: false } ]
                     }
@@ -212,20 +212,20 @@ describe('SetSchema', function() {
     it('Valid parameters don\'t throw', function() {
         return store.setSchema({
             cars: {
-                definition: {
+                fields: {
                     color: 'string',
                     year: 'int',
                     '9-convertible_32': 'boolean',
                     purchaseDate: 'date',
                     created: 'timestamp'
                 },
-                indices: {
+                indexes: {
                     date: {
-                        uniq: true,
+                        unique: true,
                         fields: [ { name: 'purchaseDate' } ]
                     },
                     details: {
-                        uniq: false,
+                        unique: false,
                         fields: [ 'color', 'year', '9-convertible_32' ]
                     }
                 }
@@ -242,13 +242,13 @@ describe('SetSchema', function() {
 
         return store.setSchema({
             cars: {
-                definition: {
+                fields: {
                     color: 'string',
                     purchaseDate: 'date'
                 },
-                indices: {
+                indexes: {
                     first: {
-                        uniq: true,
+                        unique: true,
                         fields: [ 'purchaseDate' ]
                     }
                 }
@@ -260,14 +260,14 @@ describe('SetSchema', function() {
 
             return store.setSchema({
                 cars: {
-                    definition: {
+                    fields: {
                         color: 'string',
                         purchaseDate: 'date',
                         make: 'string'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate' ]
                         }
                     }

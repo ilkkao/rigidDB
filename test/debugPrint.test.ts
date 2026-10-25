@@ -11,7 +11,7 @@ describe('DebugPrint', function() {
 
             return store.setSchema({
                 cars: {
-                    definition: {
+                    fields: {
                         color: { type: 'string', allowNull: true },
                         mileage: 'int',
                         convertible: 'boolean',
@@ -19,13 +19,13 @@ describe('DebugPrint', function() {
                         serviceDate: 'timestamp',
                         extra: 'string'
                     },
-                    indices: {
+                    indexes: {
                         first: {
-                            uniq: true,
+                            unique: true,
                             fields: [ 'purchaseDate', 'color' ]
                         },
                         second: {
-                            uniq: false,
+                            unique: false,
                             fields: [ 'color', 'mileage', 'convertible' ]
                         }
                     }

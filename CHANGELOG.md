@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.0
+
+The API now uses the same terms as the documentation: records with fields, stored in collections and found through indexes.
+
+### Breaking changes
+
+- Schema keys are renamed: `definition` is `fields`, `indices` is `indexes`, and `uniq` is `unique`.
+- `multi()` is renamed to `transaction()`, and `size()` to `count()`. The `method` of their failed results is `'transaction'` and `'count'`.
+- The `indices` property of a failed `create` or `update` result is renamed to `indexes`.
+- Error code `badParameter` is renamed to `missingFields`, and `badSavedSchema` to `invalidStoredSchema`.
+- TypeScript types `Attributes`, `Value`, and `Id` are renamed to `FieldValues`, `FieldValue`, and `RecordId`.
+
+Databases created with 0.x keep working: the stored schema is read with the old key names, and `getSchema()` returns it with the new ones. The Redis key layout is unchanged.
+
+### Other changes
+
+- The generated Lua scripts are built from indented multi-line blocks and are indented like hand-written Lua in the debug log.
+- README uses database terminology.
+
 ## 0.12.1
 
 ### Fixes
