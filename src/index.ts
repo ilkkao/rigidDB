@@ -119,17 +119,23 @@ class Context {
     readonly params: string[] = [];
     script = '';
     error: { method: Method; err: ErrorCode } | null = null;
+    private depth = 0;
 
-    // Appends Lua code. Indentation and empty lines are dropped, so the code can be formatted
-    // freely at the call site.
+    // Appends Lua code. The common indentation of the snippet is replaced with the indentation of
+    // the current block, so the generated script is indented like hand-written Lua.
     lua(code: string): void {
-        for (const line of code.split('\n')) {
-            const trimmed = line.trim();
+        const prefix = '    '.repeat(this.depth);
 
-            if (trimmed) {
-                this.script += `${trimmed}\n`;
-            }
+        for (const line of dedent(code)) {
+            this.script += `${`${prefix}${line}`.trimEnd()}\n`;
         }
+    }
+
+    // Lua code added by the callback is indented one level deeper
+    indented(cb: () => void): void {
+        this.depth++;
+        cb();
+        this.depth--;
     }
 
     // Passes the value to the script as a parameter and returns the Lua expression referring to it
@@ -396,7 +402,7 @@ export class RigidDB {
         // Every operation gets its own Lua block. Lua allows max 200 local variables per function,
         // a long multi() would otherwise run out of them.
         ctx.lua('do');
-        op.call(this, ctx, collection, ...args);
+        ctx.indented(() => op.call(this, ctx, collection, ...args));
         ctx.lua('end');
     }
 
@@ -405,7 +411,7 @@ export class RigidDB {
             return { val: false, err: ctx.error.err, method: ctx.error.method };
         }
 
-        const code = `${utilityFuncs()}\nlocal ret = { 'none', 'noError' }\n${ctx.script}\nreturn ret`;
+        const code = `${utilityFuncs()}\n\nlocal ret = { 'none', 'noError' }\n${ctx.script}return ret\n`;
         const sha1 = createHash('sha1').update(code).digest('hex');
 
         debug(`PARAMETERS : ${ctx.params.join(', ')}`);
@@ -959,8 +965,16 @@ function onlyLettersNumbersDashes(str: string): boolean {
     return /^[a-zA-Z0-9_-]+$/.test(str);
 }
 
+// Removes the leading empty lines, trailing whitespace, and the indentation common to all lines
+function dedent(code: string): string[] {
+    const lines = code.replace(/^\n+/, '').trimEnd().split('\n');
+    const indent = Math.min(...lines.filter(line => line.trim() !== '').map(line => line.length - line.trimStart().length));
+
+    return lines.map(line => line.slice(indent).trimEnd());
+}
+
 function utilityFuncs(): string {
-    return `
+    return dedent(`
         local hgetall = function (key)
             local bulk = redis.call('HGETALL', key)
             local result = {}
@@ -984,5 +998,5 @@ function utilityFuncs(): string {
             end
             return redis.call('HSET', key, unpack(bulk))
         end
-    `;
+    `).join('\n');
 }
