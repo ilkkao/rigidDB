@@ -6,7 +6,7 @@ Typed, indexed records in Redis.
 
 A promise-based Node.js library that stores plain JavaScript objects in Redis and makes them searchable through secondary indexes. Each operation runs as a single Lua script, so a record and its indexes are always updated together. Every write is validated against a predefined schema.
 
-Requires Node.js 22 or later. The package is an ES module and includes TypeScript type definitions.
+Requires Node.js 22 or later and Redis 6.2 or later. The package is an ES module and includes TypeScript type definitions.
 
 ## Installation
 
@@ -154,6 +154,7 @@ Errors from Redis itself, such as a lost connection, are passed through as they 
 | `wrongType`         | A field value doesn't match the field type in the schema. |
 | `notFound`          | No record with the given id exists. |
 | `notUnique`         | The write would violate a unique index. |
+| `invalidQuery`      | The options or range bounds given to `find()`, `findRecords()`, or `list()` are invalid. |
 
 ### setSchema(schemaDefinition)
 
@@ -223,13 +224,23 @@ Checks whether a record with the given id exists.
 | collection   | Name of the collection. |
 | id           | Id of the record to check. |
 
-### list(collection)
+### getMany(collection, ids)
 
-Returns the ids of all records in a collection.
+Fetches several records in one call. Resolves to the records in the order of `ids`, with `null` for an id that doesn't exist.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
+| ids          | Ids of the records to fetch. |
+
+### list(collection, options)
+
+Returns the ids of the records in a collection, sorted by id.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+| options      | Optional. `limit`, `offset`, and `order`, see `find()`. |
 
 ### count(collection)
 
@@ -261,14 +272,28 @@ Resolves to the result of the last operation in the transaction.
 |--------------|---------------------------------------------------------------|
 | callback     | A function that queues the operations on the transaction object it receives. |
 
-### find(collection, query)
+### find(collection, query, options)
 
-Finds the ids of the records that match the given field values, using the index that has exactly those fields.
+Finds the ids of the records that match the query, using the index that has exactly the fields of the query.
+
+A field of a range index can be queried with bounds instead of a value: `{ gt, gte, lt, lte }`, any of them optional. Range indexes don't contain records whose value is `null`.
+
+```javascript
+await store.find('cars', { color: 'blue' });
+await store.find('cars', { mileage: { gte: 1000, lt: 5000 } }, { order: 'desc', limit: 10 });
+```
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
-| query        | The field values to search for. |
+| query        | The field values or range bounds to search for. |
+| options      | Optional. `limit`: maximum number of results, all by default. `offset`: number of results to skip, 0 by default. `order`: `'asc'` (default) or `'desc'`. Results are sorted by the field value when a range index is used, otherwise by id. |
+
+Fails with `invalidQuery` if the options or the bounds are invalid.
+
+### findRecords(collection, query, options)
+
+Like `find()`, but resolves to the matching records as `{ id, record }` objects. The ids and the records are read in one Lua script.
 
 ### debugPrint(collection)
 
@@ -283,6 +308,16 @@ Use only with small collections during development.
 ### quit()
 
 Closes the database connection. A client passed to the constructor is left open.
+
+## Range indexes
+
+An index with `range: true` keeps the records sorted by one `int`, `date`, or `timestamp` field, so that `find()` can query it with bounds. A range index can't be unique.
+
+```javascript
+indexes: {
+    byMileage: { unique: false, range: true, fields: [ 'mileage' ] }
+}
+```
 
 ## Supported data types
 
