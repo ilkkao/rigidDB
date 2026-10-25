@@ -83,7 +83,7 @@ describe('Regressions', function() {
 
         store = new RigidDB('bar', 42, redisOpts);
         await store.setSchema(srcSchema);
-        srcSchema.car.fields['model'] = 'int';
+        (srcSchema.car.fields as Record<string, string>)['model'] = 'int';
 
         const result = await store.getSchema();
         expect(result.schema['car']?.fields['model']).to.equal('string');
