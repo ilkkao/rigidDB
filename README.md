@@ -75,6 +75,38 @@ try {
 
 CommonJS code can load the module with `require('rigiddb').default`.
 
+## TypeScript
+
+Pass the type of the schema to `RigidDB` to check collection names, field values, and `find()` queries at compile time. `defineSchema()` keeps the literal types of the schema, so no `as const` is needed.
+
+```typescript
+import RigidDB, { defineSchema } from 'rigiddb';
+
+const schema = defineSchema({
+    cars: {
+        fields: {
+            model: { type: 'string', allowNull: false },
+            mileage: 'int'
+        },
+        indexes: {
+            byModel: { unique: true, fields: [ 'model' ] }
+        }
+    }
+});
+
+const store = new RigidDB<typeof schema>('mydb', 42);
+
+await store.setSchema(schema);
+
+const id = await store.create('cars', { model: 'sedan', mileage: 12345 });
+const car = await store.get('cars', id); // { model: string; mileage: number | null }
+
+await store.find('cars', { model: 'sedan' });
+await store.find('cars', { mileage: 1 }); // Type error: no index has only the field mileage
+```
+
+`RecordOf<typeof schema, 'cars'>` is the type of a `cars` record. Without a type argument, the values are checked only at runtime.
+
 ## Connection API
 
 ### new RigidDB(databaseName, revision, connection, redisErrorHandler)
