@@ -9,9 +9,14 @@
 - In a transaction, an `exists()` that finds no record fails the transaction with `notFound` instead of resolving to `false`.
 - The `Result`, `Success`, `Failure`, and `SetSchemaResult` types are removed.
 - `quit()` resolves to nothing, and leaves a client passed to the constructor open.
+- Redis 6.2 or later is required.
 
 ### New features
 
+- Range indexes (`range: true`) on one `int`, `date`, or `timestamp` field. `find()` queries them with `{ gt, gte, lt, lte }` bounds and sorts the results by the field value.
+- `find()` and `list()` take `limit`, `offset`, and `order` options. Results of an exact index are sorted by id.
+- `findRecords()` resolves to the matching records with their ids, and `getMany()` fetches several records by id, both in one Lua script.
+- Error code `invalidQuery` for invalid options and range bounds.
 - `RigidDB` takes the type of the schema as a type argument. Collection names, the values given to `create()`, `update()`, and transactions, the records returned by `get()`, and `find()` queries are then checked at compile time. `defineSchema()` keeps the literal types of a schema, and `RecordOf<S, C>` is the type of a record.
 - The third constructor argument can be an existing ioredis client, a `redis://` or `rediss://` URL, or any ioredis options, such as `username`, `tls`, or `sentinels`. The `keyPrefix` option is rejected, because the Lua scripts can't honor it.
 
