@@ -1,12 +1,18 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts } from './helpers.ts';
 
-const expect = require('chai').expect,
-    RigidDB = require('../index');
-
-let store = new RigidDB('foo', 42, { db: 15 });
+let store: RigidDB;
 
 describe('SetSchema', function() {
+    beforeEach(function() {
+        return redisClient.flushdb().then(function() {
+            store = new RigidDB('foo', 42, redisOpts);
+        });
+    });
+
     it('Missing schema parameter', function() {
+        // @ts-expect-error: invalid input on purpose
         return store.setSchema().then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
@@ -18,6 +24,7 @@ describe('SetSchema', function() {
 
     it('Circular reference', function() {
         let schema = {};
+        // @ts-expect-error: invalid input on purpose
         schema.schema = schema;
 
         return store.setSchema(schema).then(function(result) {
@@ -40,6 +47,7 @@ describe('SetSchema', function() {
     });
 
     it('Missing collection definition', function() {
+        // @ts-expect-error: invalid input on purpose
         return store.setSchema({ cars: {} }).then(function(result) {
             expect(result).to.deep.equal({
                 method: 'setSchema',
@@ -69,6 +77,7 @@ describe('SetSchema', function() {
         return store.setSchema({
             cars: {
                 definition: {
+                    // @ts-expect-error: invalid input on purpose
                     color: 'wrong'
                 }
             }
@@ -85,6 +94,7 @@ describe('SetSchema', function() {
         return store.setSchema({
             cars: {
                 definition: {
+                    // @ts-expect-error: invalid input on purpose
                     color: {}
                 }
             }
@@ -102,6 +112,7 @@ describe('SetSchema', function() {
             cars: {
                 definition: { color: 'string' },
                 indices: {
+                    // @ts-expect-error: invalid input on purpose
                     first: {
                         fields: [ 'color' ]
                     }
@@ -123,6 +134,7 @@ describe('SetSchema', function() {
                 indices: {
                     first: {
                         uniq: true,
+                        // @ts-expect-error: invalid input on purpose
                         fields: 'color'
                     }
                 }
@@ -183,6 +195,7 @@ describe('SetSchema', function() {
                 indices: {
                     first: {
                         uniq: true,
+                        // @ts-expect-error: invalid input on purpose
                         fields: [ { name: 'color', caseInSensitive: false } ]
                     }
                 }
@@ -225,7 +238,7 @@ describe('SetSchema', function() {
     });
 
     it('Set Schema can\'t be modified', function() {
-        store = new RigidDB('baz', 42, { db: 15 });
+        store = new RigidDB('baz', 42, redisOpts);
 
         return store.setSchema({
             cars: {

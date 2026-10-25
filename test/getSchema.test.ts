@@ -1,18 +1,12 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts } from './helpers.ts';
 
-const expect = require('chai').expect,
-    Redis = require('ioredis'),
-    RigidDB = require('../index');
-
-let redisClient = new Redis({
-    db: 15
-});
-
-let store = new RigidDB('foo', 42, { db: 15 });
+let store = new RigidDB('foo', 42, redisOpts);
 
 describe('GetSchema', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', 42, { db: 15 });
+        store = new RigidDB('foo', 42, redisOpts);
 
         return redisClient.flushdb();
     });
@@ -53,7 +47,7 @@ describe('GetSchema', function() {
         }).then(function(result) {
             expect(result).to.deep.equal({
                 val: {
-                    revision: 1, schema: {
+                    revision: 42, schema: {
                         cars: {
                             definition: {
                                 color: 'string',

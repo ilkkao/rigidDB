@@ -1,19 +1,13 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts } from './helpers.ts';
 
-const expect = require('chai').expect,
-    Redis = require('ioredis'),
-    RigidDB = require('../index');
-
-let redisClient = new Redis({
-    db: 15
-});
-
-let store;
+let store: RigidDB;
 
 describe('DebugPrint', function() {
     beforeEach(function() {
         return redisClient.flushdb().then(function() {
-            store = new RigidDB('foo', 42, { db: 15 });
+            store = new RigidDB('foo', 42, redisOpts);
 
             return store.setSchema({
                 cars: {
@@ -63,20 +57,20 @@ describe('DebugPrint', function() {
             expect(params).to.deep.equal([
                 {
                     color: '[NULL]',
-                    extra: '\"~\"',
+                    extra: '"~"',
                     id: '1',
                     mileage: '12345',
                     convertible: 'true',
-                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString(),
-                    serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
+                    purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toISOString(),
+                    serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toISOString()
                 }, {
-                    color: '\"blue\"',
-                    extra: '\"~~~\"',
+                    color: '"blue"',
+                    extra: '"~~~"',
                     id: '2',
                     mileage: '12345',
                     convertible: 'true',
-                    purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)').toString(),
-                    serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toString()
+                    purchaseDate: new Date('Sun Nov 01 2015 22:41:24 GMT+0100 (CET)').toISOString(),
+                    serviceDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)').toISOString()
                 }
             ]);
         };

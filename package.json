@@ -1,13 +1,28 @@
 {
   "name": "rigiddb",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "Object store with an index and strict schema",
-  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "npm run lint && npm run run-tests",
-    "run-tests": "istanbul cover _mocha",
-    "coveralls": "cat ./coverage/lcov.info | coveralls",
-    "lint": "eslint index.js test"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings",
+    "test": "mocha",
+    "coverage": "c8 --reporter=lcov --reporter=text mocha",
+    "prepack": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -24,17 +39,19 @@
     "url": "https://github.com/ilkkao/rigidDB/issues"
   },
   "homepage": "https://github.com/ilkkao/rigidDB#readme",
-  "devDependencies": {
-    "chai": "^3.4.0",
-    "coveralls": "^2.0.0",
-    "eslint": "^3.0.0",
-    "istanbul": "^0.4.0",
-    "mocha": "^3.0.0"
-  },
   "dependencies": {
-    "clone": "2.1.1",
-    "console.table": "0.7.0",
-    "debug": "2.2.0",
-    "ioredis": "3.0.0"
+    "debug": "^4.4.3",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.3",
+    "@types/debug": "^4.1.13",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.6.5",
+    "c8": "^12.0.0",
+    "chai": "^6.3.0",
+    "mocha": "^12.0.3",
+    "oxlint": "^1.89.0",
+    "typescript": "^7.0.2"
   }
 }
