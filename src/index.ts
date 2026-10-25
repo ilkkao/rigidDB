@@ -114,10 +114,30 @@ interface RedisIndex {
     uniq: boolean;
 }
 
-interface Context {
-    params: string[];
-    script: string;
-    error: { method: Method; err: ErrorCode } | null;
+// Collects the Lua code and the parameters of a script
+class Context {
+    readonly params: string[] = [];
+    script = '';
+    error: { method: Method; err: ErrorCode } | null = null;
+
+    // Appends Lua code. Indentation and empty lines are dropped, so the code can be formatted
+    // freely at the call site.
+    lua(code: string): void {
+        for (const line of code.split('\n')) {
+            const trimmed = line.trim();
+
+            if (trimmed) {
+                this.script += `${trimmed}\n`;
+            }
+        }
+    }
+
+    // Passes the value to the script as a parameter and returns the Lua expression referring to it
+    arg(value: Id): string {
+        this.params.push(String(value));
+
+        return `ARGV[${this.params.length}]`;
+    }
 }
 
 type Op<A extends unknown[]> = (ctx: Context, collection: string, ...args: A) => void;
@@ -231,7 +251,7 @@ export class RigidDB {
     async multi(cb: (tr: Transaction) => void): Promise<Result<unknown>> {
         await this.ensureSchema();
 
-        const ctx = newContext();
+        const ctx = new Context();
 
         if (this.invalidSavedSchema) {
             ctx.error = { method: 'multi', err: 'badSavedSchema' };
@@ -354,7 +374,7 @@ export class RigidDB {
     ): Promise<Result<T>> {
         await this.ensureSchema();
 
-        const ctx = newContext();
+        const ctx = new Context();
 
         if (this.invalidSavedSchema) {
             ctx.error = { method, err: 'badSavedSchema' };
@@ -375,9 +395,9 @@ export class RigidDB {
 
         // Every operation gets its own Lua block. Lua allows max 200 local variables per function,
         // a long multi() would otherwise run out of them.
-        genCode(ctx, 'do');
+        ctx.lua('do');
         op.call(this, ctx, collection, ...args);
-        genCode(ctx, 'end');
+        ctx.lua('end');
     }
 
     private async exec(ctx: Context): Promise<Result<unknown>> {
@@ -462,16 +482,19 @@ export class RigidDB {
             return;
         }
 
-        genCode(ctx, `local id = redis.call('INCR', '${this.keyPrefix}:${collection}:nextid')`);
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:' .. id`);
+        ctx.lua(`
+            local id = redis.call('INCR', '${this.keyPrefix}:${collection}:nextid')
+            local key = '${this.keyPrefix}:${collection}:' .. id
+        `);
         this.addValuesVar(ctx, redisAttrs.val);
 
         this.addIndices(ctx, collection, 'create', true);
 
-        genCode(ctx, `hset(key, values)`);
-        genCode(ctx, `redis.call('ZADD', '${this.keyPrefix}:${collection}:ids', id, id)`);
-
-        genCode(ctx, `ret = { 'create', 'noError', id }`);
+        ctx.lua(`
+            hset(key, values)
+            redis.call('ZADD', '${this.keyPrefix}:${collection}:ids', id, id)
+            ret = { 'create', 'noError', id }
+        `);
     }
 
     private updateOp(ctx: Context, collection: string, id: Id, attrs: Attributes): void {
@@ -482,72 +505,84 @@ export class RigidDB {
             return;
         }
 
-        genCode(ctx, `local id = ${arg(ctx, id)}`);
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:' .. id`);
-        genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'update', 'notFound' } end`);
-        genCode(ctx, `local values = hgetall(key)`);
-        genCode(ctx, `local chg = 0`);
+        ctx.lua(`
+            local id = ${ctx.arg(id)}
+            local key = '${this.keyPrefix}:${collection}:' .. id
+            if redis.call("EXISTS", key) == 0 then return { 'update', 'notFound' } end
+            local values = hgetall(key)
+            local chg = 0
+        `);
 
-        const argRefs = Object.entries(redisAttrs.val).map(([prop, val]) => [prop, arg(ctx, val)] as const);
+        const argRefs = Object.entries(redisAttrs.val).map(([prop, val]) => [prop, ctx.arg(val)] as const);
 
         for (const [prop, ref] of argRefs) {
-            genCode(ctx, `if values['${prop}'] ~= ${ref} then chg = chg + 1 end`);
-            genCode(ctx, `values['${prop}'] = ${ref}`);
+            ctx.lua(`
+                if values['${prop}'] ~= ${ref} then chg = chg + 1 end
+                values['${prop}'] = ${ref}
+            `);
         }
 
         this.assertUniqIndicesFree(ctx, this.genAllIndices(collection), 'update');
 
-        genCode(ctx, `values = hgetall(key)`);
+        ctx.lua(`values = hgetall(key)`);
         this.removeIndices(ctx, collection);
 
         for (const [prop, ref] of argRefs) {
-            genCode(ctx, `values['${prop}'] = ${ref}`);
+            ctx.lua(`values['${prop}'] = ${ref}`);
         }
 
         // Uniqueness was verified above, before anything was modified
         this.addIndices(ctx, collection, 'update', false);
 
-        genCode(ctx, `hset(key, values)`);
-        genCode(ctx, `ret = { 'update', 'noError', chg }`);
+        ctx.lua(`
+            hset(key, values)
+            ret = { 'update', 'noError', chg }
+        `);
     }
 
     private deleteOp(ctx: Context, collection: string, id: Id): void {
-        genCode(ctx, `local id = ${arg(ctx, id)}`);
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:' .. id`);
-        genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'delete', 'notFound' } end`);
-        genCode(ctx, `local values = hgetall(key)`);
+        ctx.lua(`
+            local id = ${ctx.arg(id)}
+            local key = '${this.keyPrefix}:${collection}:' .. id
+            if redis.call("EXISTS", key) == 0 then return { 'delete', 'notFound' } end
+            local values = hgetall(key)
+        `);
 
         this.removeIndices(ctx, collection);
 
-        genCode(ctx, `redis.call('ZREM', '${this.keyPrefix}:${collection}:ids', id)`);
-        genCode(ctx, `redis.call('DEL', key)`);
-        genCode(ctx, `ret = { 'delete', 'noError' }`);
+        ctx.lua(`
+            redis.call('ZREM', '${this.keyPrefix}:${collection}:ids', id)
+            redis.call('DEL', key)
+            ret = { 'delete', 'noError' }
+        `);
     }
 
     private getOp(ctx: Context, collection: string, id: Id): void {
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:' .. ${arg(ctx, id)}`);
-        genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'get', 'notFound' } end`);
-        genCode(ctx, `ret = { 'get', 'noError', redis.call('HGETALL', key), '${collection}' }`);
+        ctx.lua(`
+            local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
+            if redis.call("EXISTS", key) == 0 then return { 'get', 'notFound' } end
+            ret = { 'get', 'noError', redis.call('HGETALL', key), '${collection}' }
+        `);
     }
 
     private existsOp(ctx: Context, collection: string, id: Id): void {
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:' .. ${arg(ctx, id)}`);
-        genCode(ctx, `if redis.call("EXISTS", key) == 0 then return { 'exists', 'noError', 0 } end`);
-        genCode(ctx, `ret = { 'exists', 'noError', 1 }`);
+        ctx.lua(`
+            local key = '${this.keyPrefix}:${collection}:' .. ${ctx.arg(id)}
+            if redis.call("EXISTS", key) == 0 then return { 'exists', 'noError', 0 } end
+            ret = { 'exists', 'noError', 1 }
+        `);
     }
 
     private sizeOp(ctx: Context, collection: string): void {
-        genCode(ctx, `ret = { 'size', 'noError', redis.call('ZCARD', '${this.keyPrefix}:${collection}:ids') }`);
+        ctx.lua(`ret = { 'size', 'noError', redis.call('ZCARD', '${this.keyPrefix}:${collection}:ids') }`);
     }
 
     private currentIdOp(ctx: Context, collection: string): void {
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:nextid'`);
-        genCode(ctx, `ret = { 'currentId', 'noError', redis.call('GET', key) or 0 }`);
+        ctx.lua(`ret = { 'currentId', 'noError', redis.call('GET', '${this.keyPrefix}:${collection}:nextid') or 0 }`);
     }
 
     private listOp(ctx: Context, collection: string): void {
-        genCode(ctx, `local key = '${this.keyPrefix}:${collection}:ids'`);
-        genCode(ctx, `ret = { 'list', 'noError', redis.call("ZRANGE", key, 0, -1) }`);
+        ctx.lua(`ret = { 'list', 'noError', redis.call('ZRANGE', '${this.keyPrefix}:${collection}:ids', 0, -1) }`);
     }
 
     private findOp(ctx: Context, collection: string, attrs: Attributes): void {
@@ -573,13 +608,15 @@ export class RigidDB {
         const name = this.indexName(collection, index);
         const prop = indexValues(index);
 
-        genCode(ctx, `local result = redis.call('HGET', '${name}', ${prop})`);
-        genCode(ctx, `if result ~= false then`);
-        genCode(ctx, `result = { result }`);
-        genCode(ctx, `else`);
-        genCode(ctx, `result = redis.call('SMEMBERS', '${name}:' .. ${prop})`);
-        genCode(ctx, `end`);
-        genCode(ctx, `ret = { 'find', 'noError', result }`);
+        ctx.lua(`
+            local result = redis.call('HGET', '${name}', ${prop})
+            if result ~= false then
+                result = { result }
+            else
+                result = redis.call('SMEMBERS', '${name}:' .. ${prop})
+            end
+            ret = { 'find', 'noError', result }
+        `);
     }
 
     private genAllIndices(collection: string): RedisIndex[] {
@@ -602,23 +639,23 @@ export class RigidDB {
     }
 
     private assertUniqIndicesFree(ctx: Context, indices: RedisIndex[], method: Method): void {
-        genCode(ctx, `local nonUniqIndices, uniqError = {}, false`);
+        ctx.lua(`local nonUniqIndices, uniqError = {}, false`);
 
         for (const index of indices.filter(candidate => candidate.uniq)) {
             const notNullCheck = index.fields.map(field => `values["${field.name}"] ~= '~'`).join(' and ');
 
-            genCode(ctx, `do`);
-            genCode(ctx, `local currentIndex = redis.call('HGET', '${index.redisKey}', ${index.redisValue})`);
-            genCode(ctx, `if currentIndex and currentIndex ~= tostring(id) and ${notNullCheck} then`);
-            genCode(ctx, `table.insert(nonUniqIndices, '${index.name}')`);
-            genCode(ctx, `uniqError = true`);
-            genCode(ctx, `end`);
-            genCode(ctx, `end`);
+            ctx.lua(`
+                do
+                    local currentIndex = redis.call('HGET', '${index.redisKey}', ${index.redisValue})
+                    if currentIndex and currentIndex ~= tostring(id) and ${notNullCheck} then
+                        table.insert(nonUniqIndices, '${index.name}')
+                        uniqError = true
+                    end
+                end
+            `);
         }
 
-        genCode(ctx, `if uniqError then`);
-        genCode(ctx, `return { '${method}', 'notUnique', nonUniqIndices }`);
-        genCode(ctx, `end`);
+        ctx.lua(`if uniqError then return { '${method}', 'notUnique', nonUniqIndices } end`);
     }
 
     private addIndices(ctx: Context, collection: string, method: Method, assertUniq: boolean): void {
@@ -629,46 +666,46 @@ export class RigidDB {
         }
 
         for (const { redisKey, redisValue } of indices) {
-            genCode(ctx, `do`);
-            genCode(ctx, `local hashId = redis.call('HGET', '${redisKey}', ${redisValue})`);
-            genCode(ctx, `local isSet = redis.call('EXISTS', '${redisKey}:' .. ${redisValue})`);
-            genCode(ctx, `if not hashId and isSet == 0 then `);
-            genCode(ctx, `redis.call('HSET', '${redisKey}', ${redisValue}, id)`);
-            genCode(ctx, `elseif isSet == 0 then`);
-            genCode(ctx, `redis.call('HDEL', '${redisKey}', ${redisValue})`);
-            genCode(ctx, `redis.call('SADD', '${redisKey}:' .. ${redisValue}, id, hashId)`);
-            genCode(ctx, `else`);
-            genCode(ctx, `redis.call('SADD', '${redisKey}:' .. ${redisValue}, id)`);
-            genCode(ctx, `end`);
-            genCode(ctx, `end`);
+            ctx.lua(`
+                do
+                    local hashId = redis.call('HGET', '${redisKey}', ${redisValue})
+                    local isSet = redis.call('EXISTS', '${redisKey}:' .. ${redisValue})
+                    if not hashId and isSet == 0 then
+                        redis.call('HSET', '${redisKey}', ${redisValue}, id)
+                    elseif isSet == 0 then
+                        redis.call('HDEL', '${redisKey}', ${redisValue})
+                        redis.call('SADD', '${redisKey}:' .. ${redisValue}, id, hashId)
+                    else
+                        redis.call('SADD', '${redisKey}:' .. ${redisValue}, id)
+                    end
+                end
+            `);
         }
     }
 
     private removeIndices(ctx: Context, collection: string): void {
         for (const { redisKey, redisValue } of this.genAllIndices(collection)) {
-            genCode(ctx, `do`);
-            genCode(ctx, `local removed = redis.call('HDEL', '${redisKey}', ${redisValue})`);
-            genCode(ctx, `if removed == 0 then`);
-            genCode(ctx, `redis.call('SREM', '${redisKey}:' .. ${redisValue}, id)`);
-            genCode(ctx, `local remaining = redis.call('SCARD', '${redisKey}:' .. ${redisValue})`);
-            genCode(ctx, `if remaining == 1 then`);
-            genCode(ctx, `local last = redis.call('SMEMBERS', '${redisKey}:' .. ${redisValue})`);
-            genCode(ctx, `redis.call('DEL', '${redisKey}:' .. ${redisValue})`);
-            genCode(ctx, `redis.call('HSET', '${redisKey}', ${redisValue}, last[1])`);
-            genCode(ctx, `end`);
-            genCode(ctx, `end`);
-            genCode(ctx, `end`);
+            ctx.lua(`
+                do
+                    local removed = redis.call('HDEL', '${redisKey}', ${redisValue})
+                    if removed == 0 then
+                        redis.call('SREM', '${redisKey}:' .. ${redisValue}, id)
+                        local remaining = redis.call('SCARD', '${redisKey}:' .. ${redisValue})
+                        if remaining == 1 then
+                            local last = redis.call('SMEMBERS', '${redisKey}:' .. ${redisValue})
+                            redis.call('DEL', '${redisKey}:' .. ${redisValue})
+                            redis.call('HSET', '${redisKey}', ${redisValue}, last[1])
+                        end
+                    end
+                end
+            `);
         }
     }
 
     private addValuesVar(ctx: Context, attrs: Record<string, string>): void {
-        genCode(ctx, `local values = {`);
+        const values = Object.entries(attrs).map(([prop, val]) => `['${prop}'] = ${ctx.arg(val)}`);
 
-        for (const [prop, val] of Object.entries(attrs)) {
-            genCode(ctx, `['${prop}'] = ${arg(ctx, val)},`);
-        }
-
-        genCode(ctx, `}`);
+        ctx.lua(`local values = { ${values.join(', ')} }`);
     }
 
     private processRedisGetReturnValue(collection: string, redisRetVal: string[]): Attributes {
@@ -908,21 +945,6 @@ function indexValues(index: NormalizedIndex): string {
             return `(string.gsub(${valueCode}, ':', '::'))`;
         })
         .join(`..':'..`);
-}
-
-function newContext(): Context {
-    return { params: [], script: '', error: null };
-}
-
-function genCode(ctx: Context, lua: string): void {
-    ctx.script += `${lua}\n`;
-}
-
-// Passes the value to the script as a parameter and returns the Lua expression referring to it
-function arg(ctx: Context, value: Id): string {
-    ctx.params.push(String(value));
-
-    return `ARGV[${ctx.params.length}]`;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
