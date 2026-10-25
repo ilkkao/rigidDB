@@ -1,19 +1,13 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts, unwrap } from './helpers.ts';
 
-const expect = require('chai').expect,
-    Redis = require('ioredis'),
-    RigidDB = require('../index');
-
-let redisClient = new Redis({
-    db: 15
-});
-
-let store;
-let id;
+let store: RigidDB;
+let id: number;
 
 describe('Update', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', 42, { db: 15 });
+        store = new RigidDB('foo', 42, redisOpts);
 
         return redisClient.flushdb().then(function() {
             return store.setSchema({
@@ -44,7 +38,7 @@ describe('Update', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
-            id = result.val;
+            id = unwrap(result);
         });
     });
 
@@ -119,10 +113,10 @@ describe('Update', function() {
                 color: 'red',
                 mileage: '4242',
                 convertible: 'true',
-                purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString()
+                purchaseDate: new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toISOString()
             });
 
-            return redisClient.zrange('foo-42:car:ids', 0, -1);
+            return redisClient.zrange('foo-42:car:ids', 0, '-1');
         }).then(function(result) {
             expect(result).to.deep.equal([ id.toString() ]);
 
@@ -132,8 +126,8 @@ describe('Update', function() {
 
             return redisClient.hgetall('foo-42:car:i:purchaseDate');
         }).then(function(result) {
-            let dateResult = {};
-            dateResult[new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toString().replace(/:/g, '::')] = '1';
+            const dateResult: Record<string, string> = {};
+            dateResult[new Date('Wed Nov 11 2015 18:19:56 GMT+0100 (CET)').toISOString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
             return redisClient.hget('foo-42:car:i:color:convertible:mileage', 'red:true:4242');

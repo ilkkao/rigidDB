@@ -1,22 +1,16 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts, unwrap } from './helpers.ts';
 
-const expect = require('chai').expect,
-    Redis = require('ioredis'),
-    RigidDB = require('../index');
+let store: RigidDB;
+let id: number;
 
-let redisClient = new Redis({
-    db: 15
-});
-
-let store;
-let id;
-
-describe('Delete', function() {
+describe('Exists', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', 42, { db: 15 });
-
         return redisClient.flushdb().then(function() {
-            return store.setSchema({
+            store = new RigidDB('foo', 42, redisOpts);
+
+            store.setSchema({
                 car: {
                     definition: {
                         color: 'string',
@@ -44,37 +38,31 @@ describe('Delete', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
             });
         }).then(function(result) {
-            id = result.val;
+            id = unwrap(result);
         });
     });
 
-    it('Fails if id doesn\'t exists', function() {
-        return store.delete('car', 42).then(function(result) {
+    it('Fails if id doesn\'t exist', function() {
+        return store.exists('car', 4242).then(function(result) {
             expect(result).to.deep.equal({
-                method: 'delete',
-                err: 'notFound',
                 val: false
             });
+
+            return redisClient.keys('*');
+        }).then(function(result) {
+            expect(result).to.have.length(6);
         });
     });
 
-    it('Redis is updated correctly', function() {
-        return store.delete('car', id).then(function(result) {
+    it('Succeeds if id exists', function() {
+        return store.exists('car', id).then(function(result) {
             expect(result).to.deep.equal({
                 val: true
             });
 
-            return redisClient.smembers('foo-42:car:ids');
-        }).then(function(result) {
-            expect(result).to.deep.equal([]);
-
-            return redisClient.get('foo-42:car:nextid');
-        }).then(function(result) {
-            expect(result).to.equal('1');
-
             return redisClient.keys('*');
         }).then(function(result) {
-            expect(result).to.have.length(2);
+            expect(result).to.have.length(6);
         });
     });
 });

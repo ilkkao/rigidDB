@@ -1,11 +1,11 @@
 # RigidDB
 
-[![Build Status](https://secure.travis-ci.org/ilkkao/rigidDB.png)](http://travis-ci.org/ilkkao/rigidDB) [![Coverage Status](https://coveralls.io/repos/ilkkao/rigidDB/badge.svg?branch=master&service=github)](https://coveralls.io/github/ilkkao/rigidDB?branch=master) [![Dependency Status](https://david-dm.org/ilkkao/rigiddb.svg)](https://david-dm.org/ilkkao/rigiddb) [![devDependency Status](https://david-dm.org/ilkkao/rigiddb/dev-status.svg)](https://david-dm.org/ilkkao/rigiddb#info=devDependencies)
+[![CI](https://github.com/ilkkao/rigidDB/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ilkkao/rigidDB/actions/workflows/ci.yml) [![Coverage Status](https://coveralls.io/repos/github/ilkkao/rigidDB/badge.svg?branch=master)](https://coveralls.io/github/ilkkao/rigidDB?branch=master) [![npm](https://img.shields.io/npm/v/rigiddb.svg)](https://www.npmjs.com/package/rigiddb)
 
 A promise based node module for saving searchable plain JavaScript objects to Redis. API methods are executed as atomic Lua scripts to avoid data/index corruption. Inserted data
 is type checked against a predefined schema.
 
-Node.js v4.0.0 or later required.
+Node.js v22 or later required. The package is an ES module and ships with TypeScript type definitions.
 
 ## Installation
 
@@ -14,11 +14,11 @@ Node.js v4.0.0 or later required.
 ## Example
 
 ```javascript
-const RigidDB = require('rigiddb');
+import RigidDB from 'rigiddb';
 
-let store = new RigidDB('mydb', 42);
+const store = new RigidDB('mydb', 42);
 
-store.setSchema({
+await store.setSchema({
     cars: {
         definition: {
             color: { type: 'string', allowNull: true },
@@ -41,36 +41,37 @@ store.setSchema({
             }
         }
     }
-}).then(function(schemaId) {
-    return store.create('cars', {
-        color: 'blue',
-        mileage: 12345,
-        convertible: true,
-        purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
-    })
-}).then(function(id) {
-    // id = 1
-
-    return store.find('cars', {
-        color: 'blue',
-        mileage: 12345
-    });
-}).then(function(results) {
-    // results = [ 1 ]
 });
+
+const { val: id } = await store.create('cars', {
+    color: 'blue',
+    model: 'sedan',
+    mileage: 12345,
+    convertible: true,
+    purchaseDate: new Date('2015-11-01T17:41:24Z')
+});
+// id = 1
+
+const { val: results } = await store.find('cars', { color: 'blue' });
+// results = [ 1 ]
 ```
+
+CommonJS code can load the module with `require('rigiddb').default`.
 
 ## Connection API
 
-### new RigidDB(databaseName, revision, redisOptions)
+### new RigidDB(databaseName, revision, redisOptions, redisErrorHandler)
 
 Create a new database connection.
 
-| Argument     | Description                                                   |
-|--------------|---------------------------------------------------------------|
-| dataBaseName | New or existing database name. All Redis keys will be prefixed with the name. |
-| revision     | Revision number of the schema, integer. |
-| redisOptions | An object containing arguments forwarded to `ioredis` node module. Supported properties are: `host`, `port`, `password`, and `db`. |
+| Argument          | Description                                                   |
+|-------------------|---------------------------------------------------------------|
+| databaseName      | New or existing database name, letters only. All Redis keys will be prefixed with the name. |
+| revision          | Revision number of the schema, integer. |
+| redisOptions      | Optional. An object containing arguments forwarded to `ioredis` node module. Supported properties are: `host`, `port`, `password`, `db`, and `retryStrategy`. |
+| redisErrorHandler | Optional. A function that is called with Redis connection errors. |
+
+Throws an `Error` if `databaseName` or `revision` is invalid.
 
 ## Database API
 
@@ -88,14 +89,31 @@ As an example, `delete` method can return:
 {
     method: 'delete',
     err: 'notFound',
+    val: false
 }
 ```
 
-TODO: list all error codes.
+A failed `create` or `update` also has an `indices` property that lists the unique indices that would have been violated.
+
+| Error code          | Description                                                   |
+|---------------------|---------------------------------------------------------------|
+| `schemaMissing`     | `setSchema()` hasn't been called for this database. |
+| `badSavedSchema`    | The schema saved in Redis is corrupted. |
+| `unknownCollection` | The collection is not in the schema. |
+| `unknownIndex`      | `find()` attributes don't match the fields of any index. |
+| `badParameter`      | `create()` didn't get a value for every attribute in the schema. |
+| `nullNotAllowed`    | Attribute value is `null` but the schema has `allowNull: false`. |
+| `wrongType`         | Attribute value doesn't match the type in the schema. |
+| `notFound`          | An object with the given id doesn't exist. |
+| `notUnique`         | The change would break a unique index. |
 
 ### setSchema(schemaDefinition)
 
 Set a schema for the database. Schema can be set once. Future versions of this library will support schema changes and data migration. Validity of a schema is checked before it is activated and persisted. Any other API call is possible only after the schema is set.
+
+Collection, field, and index names can contain letters, numbers, dashes, and underscores.
+
+Unlike other methods, an invalid schema is reported with a `reason` property (a human readable message) instead of `err`.
 
 | Argument         | Description                                                   |
 |------------------|---------------------------------------------------------------|
@@ -103,7 +121,7 @@ Set a schema for the database. Schema can be set once. Future versions of this l
 
 ### getSchema()
 
-Get the previously set schema definition.
+Get the previously set schema definition. Returns `{ revision, schema }`.
 
 ### create(collection, attributes)
 
@@ -128,6 +146,10 @@ Update an existing object in collection.
 | id           | Id of the object to be updated.
 | attributes   | An object that includes values for attributes to be updated. |
 
+##### Return value
+
+Number of attributes whose value changed.
+
 ### delete(collection, id)
 
 Remove an object from collection.
@@ -150,8 +172,6 @@ Get an object from collection
 
 Check if an object with an id exists
 
-Get an object from collection
-
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
@@ -173,11 +193,23 @@ Get the amount of objects in a collection.
 |--------------|---------------------------------------------------------------|
 | collection   | Name of the collection. |
 
+### currentId(collection)
+
+Get the id of the most recently created object in a collection, or 0 if nothing has been created.
+
+| Argument     | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| collection   | Name of the collection. |
+
 ### multi(transaction)
 
 Execute several API methods in an atomic transaction. Note that the return value of a method call inside the transaction function can't be used as an argument in the following method calls.
 
-Transaction is terminated if any of the methods return an error value. In a typical case transaction contains one or more exists() calls to make sure that the some object still exists before creating an object that points to those objects.
+Transaction is terminated if any of the methods return an error value or if `exists()` returns false. In a typical case transaction contains one or more exists() calls to make sure that the some object still exists before creating an object that points to those objects.
+
+Redis doesn't roll back a Lua script. When a method fails in Redis (for example `notFound` or `notUnique`), the changes made by the methods before it in the same transaction are kept. Put the checks first.
+
+The return value is the return value of the last method in the transaction.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
@@ -196,7 +228,7 @@ Find an object using one of the specified indices.
 
 Print the contents of a collection.
 
-Only usable with smalle collections during development.
+Only usable with small collections during development.
 
 | Argument     | Description                                                   |
 |--------------|---------------------------------------------------------------|
@@ -211,5 +243,7 @@ Terminate the database connection.
 - Boolean ('boolean')
 - Integer and float ('int')
 - String ('string')
-- Date ('date')
-- Unix timestamp ('timestamp')
+- Date ('date', stored as an ISO 8601 string)
+- Unix timestamp ('timestamp', stored as milliseconds since epoch)
+
+Both `date` and `timestamp` values are given and returned as `Date` objects.

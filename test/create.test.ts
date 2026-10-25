@@ -1,21 +1,15 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts } from './helpers.ts';
 
-const expect = require('chai').expect,
-    Redis = require('ioredis'),
-    RigidDB = require('../index');
-
-let redisClient = new Redis({
-    db: 15
-});
-
-let store;
+let store: RigidDB;
 
 describe('Create', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', 42, { db: 15 }, () => {});
+        store = new RigidDB('foo', 42, redisOpts, () => {});
 
         return redisClient.flushdb().then(function() {
-            return redisClient.script('flush');
+            return redisClient.script('FLUSH');
         }).then(function() {
             return store.setSchema({
                 car: {
@@ -128,7 +122,7 @@ describe('Create', function() {
     });
 
     it('Fails if unique index value matches when caseInSensitive is true', function() {
-        store = new RigidDB('baz', 42, { db: 15 });
+        store = new RigidDB('baz', 42, redisOpts);
 
         return store.setSchema({
             car: {
@@ -155,8 +149,8 @@ describe('Create', function() {
                 mileage: 12345,
                 convertible: true,
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)')
-            }).then(function(result) {
-                expect(result).to.deep.equal({
+            }).then(function(createResult) {
+                expect(createResult).to.deep.equal({
                     val: 1
                 });
 
@@ -166,8 +160,8 @@ describe('Create', function() {
                     convertible: true,
                     purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0100 (CET)')
                 });
-            }).then(function(result) {
-                expect(result).to.deep.equal({
+            }).then(function(createResult) {
+                expect(createResult).to.deep.equal({
                     err: 'notUnique',
                     indices: [ 'third' ],
                     method: 'create',
@@ -197,7 +191,7 @@ describe('Create', function() {
                 purchaseDate: new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').getTime().toString()
             });
 
-            return redisClient.zrange('foo-42:car:ids', 0, -1);
+            return redisClient.zrange('foo-42:car:ids', 0, '-1');
         }).then(function(result) {
             expect(result).to.deep.equal([ '1' ]);
 
@@ -207,7 +201,7 @@ describe('Create', function() {
 
             return redisClient.hgetall('foo-42:car:i:purchaseDate');
         }).then(function(result) {
-            let dateResult = {};
+            const dateResult: Record<string, string> = {};
             dateResult[new Date('Sun Nov 01 2015 17:41:24 GMT+0000 (UTC)').getTime().toString().replace(/:/g, '::')] = '1';
             expect(result).to.deep.equal(dateResult);
 
@@ -222,7 +216,7 @@ describe('Create', function() {
     });
 
     it('Redis is updated correctly when indices change from hash to set', function() {
-        store = new RigidDB('bar', 42, { db: 15 });
+        store = new RigidDB('bar', 42, redisOpts);
 
         return store.setSchema({
             car: {
@@ -314,7 +308,7 @@ describe('Create', function() {
     });
 
     it('Succeeds if the schema is set earlier', function() {
-        let secondStore = new RigidDB('foo', 42, { db: 15 });
+        let secondStore = new RigidDB('foo', 42, redisOpts);
 
         return secondStore.create('car', {
             color: 'white',
@@ -329,7 +323,7 @@ describe('Create', function() {
     });
 
     it('Fails if the schema is not set', function() {
-        let secondStore = new RigidDB('baz', 42, { db: 15 });
+        let secondStore = new RigidDB('baz', 42, redisOpts);
 
         return secondStore.create('car', {
             color: 'white',

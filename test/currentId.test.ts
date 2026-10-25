@@ -1,18 +1,12 @@
-'use strict';
+import { expect } from 'chai';
+import { RigidDB } from '../src/index.ts';
+import { redisClient, redisOpts } from './helpers.ts';
 
-const expect = require('chai').expect,
-    Redis = require('ioredis'),
-    RigidDB = require('../index');
-
-let redisClient = new Redis({
-    db: 15
-});
-
-let store;
+let store: RigidDB;
 
 describe('CurrentId', function() {
     beforeEach(function() {
-        store = new RigidDB('foo', 42, { db: 15 });
+        store = new RigidDB('foo', 42, redisOpts);
 
         return redisClient.flushdb().then(function() {
             return store.setSchema({
