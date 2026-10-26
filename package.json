@@ -23,7 +23,10 @@
     "lint": "oxlint --deny-warnings",
     "test": "mocha",
     "coverage": "c8 mocha",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "repository": {
     "type": "git",
@@ -39,7 +42,7 @@
   "bugs": {
     "url": "https://github.com/ilkkao/rigidDB/issues"
   },
-  "homepage": "https://github.com/ilkkao/rigidDB#readme",
+  "homepage": "https://ilkkao.github.io/rigidDB/",
   "dependencies": {
     "debug": "^4.4.3",
     "ioredis": "^6.0.0"
@@ -53,6 +56,7 @@
     "chai": "^6.3.0",
     "mocha": "^12.0.3",
     "oxlint": "^1.89.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitepress": "^1.6.4"
   }
 }
